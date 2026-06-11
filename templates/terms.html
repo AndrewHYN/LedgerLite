@@ -1,0 +1,247 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<style>
+:root{
+    --card: rgba(255,255,255,.04);
+    --border: rgba(255,255,255,.08);
+    --text: #e5e7eb;
+    --muted: #9ca3af;
+    --primary: #3b82f6;
+}
+
+.terms-hero{
+    background:
+        radial-gradient(circle at top right, rgba(59,130,246,.18), transparent 40%),
+        rgba(255,255,255,.03);
+    border:1px solid var(--border);
+    border-radius:24px;
+    padding:40px;
+    backdrop-filter:blur(20px);
+    margin-bottom:24px;
+}
+
+.terms-icon{
+    width:70px;
+    height:70px;
+    border-radius:18px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:linear-gradient(135deg,#3b82f6,#1d4ed8);
+    color:white;
+    font-size:30px;
+    box-shadow:0 15px 35px rgba(59,130,246,.35);
+}
+
+.terms-title{
+    font-size:2.2rem;
+    font-weight:800;
+    color:white;
+}
+
+.terms-subtitle{
+    color:var(--muted);
+}
+
+.terms-card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:20px;
+    padding:24px;
+    height:100%;
+    transition:.25s;
+}
+
+.terms-card:hover{
+    transform:translateY(-4px);
+    border-color:rgba(59,130,246,.35);
+}
+
+.terms-card h5{
+    color:white;
+    font-weight:700;
+    margin-bottom:12px;
+}
+
+.terms-card p{
+    color:var(--muted);
+    margin:0;
+    line-height:1.7;
+}
+
+.acceptance-box{
+    background:linear-gradient(
+        135deg,
+        rgba(59,130,246,.12),
+        rgba(29,78,216,.08)
+    );
+    border:1px solid rgba(59,130,246,.2);
+    border-radius:20px;
+    padding:24px;
+}
+
+.acceptance-box h4{
+    color:white;
+    font-weight:700;
+}
+
+.acceptance-box p{
+    color:#cbd5e1;
+    margin-bottom:0;
+}
+
+.security-badge{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:8px 14px;
+    border-radius:999px;
+    background:rgba(34,197,94,.12);
+    border:1px solid rgba(34,197,94,.2);
+    color:#4ade80;
+    font-weight:600;
+}
+</style>
+
+<div class="container py-4">
+
+    <!-- HERO -->
+    <div class="terms-hero">
+
+        <div class="d-flex align-items-center gap-4 flex-wrap">
+
+            <div class="terms-icon">
+                <i class="bi bi-shield-lock"></i>
+            </div>
+
+            <div>
+                <h1 class="terms-title mb-2">
+                    Terms & Conditions
+                </h1>
+
+                <p class="terms-subtitle mb-3">
+                    Transparency, security, and trust for every LedgerLite user.
+                </p>
+
+                <span class="security-badge">
+                    <i class="bi bi-check-circle-fill"></i>
+                    Last Updated: June 2026
+                </span>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- GRID -->
+    <div class="row g-4">
+
+        <div class="col-lg-6">
+            <div class="terms-card">
+                <h5>
+                    <i class="bi bi-shield-check text-primary"></i>
+                    Data Security
+                </h5>
+                <p>
+                    LedgerLite employs secure authentication, protected access controls,
+                    and modern security practices to safeguard user accounts and business
+                    information. While no system is completely immune from threats,
+                    we continuously improve our security measures.
+                </p>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="terms-card">
+                <h5>
+                    <i class="bi bi-person-lock text-primary"></i>
+                    User Responsibility
+                </h5>
+                <p>
+                    Users are responsible for protecting their account credentials
+                    and ensuring that unauthorized individuals do not gain access
+                    to their accounts.
+                </p>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="terms-card">
+                <h5>
+                    <i class="bi bi-credit-card text-primary"></i>
+                    Payments
+                </h5>
+                <p>
+                    Payments must be made only through official LedgerLite channels.
+                    LedgerLite does not store complete card information and relies on
+                    trusted payment processing partners where applicable.
+                </p>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="terms-card">
+                <h5>
+                    <i class="bi bi-database-check text-primary"></i>
+                    Data Ownership
+                </h5>
+                <p>
+                    Users retain ownership of the inventory, invoices,
+                    customer information, and business records they create
+                    within LedgerLite.
+                </p>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="terms-card">
+                <h5>
+                    <i class="bi bi-shield-exclamation text-primary"></i>
+                    Fraud Prevention
+                </h5>
+                <p>
+                    LedgerLite reserves the right to investigate suspicious
+                    activity and restrict accounts involved in fraudulent,
+                    abusive, or unlawful behavior.
+                </p>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="terms-card">
+                <h5>
+                    <i class="bi bi-exclamation-triangle text-primary"></i>
+                    Limitation of Liability
+                </h5>
+                <p>
+                    LedgerLite is provided on an "as available" basis.
+                    Users are encouraged to maintain backups of critical
+                    business information.
+                </p>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ACCEPTANCE -->
+    <div class="acceptance-box mt-4">
+
+        <h4>
+            <i class="bi bi-check2-circle"></i>
+            Acceptance of Terms
+        </h4>
+
+        <p>
+            By accessing or using LedgerLite, you acknowledge that you have read,
+            understood, and agreed to these Terms & Conditions. Continued use of
+            the platform constitutes acceptance of any future updates or revisions.
+        </p>
+
+    </div>
+
+</div>
+
+{% endblock %}

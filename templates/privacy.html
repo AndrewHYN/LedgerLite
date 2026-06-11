@@ -1,0 +1,381 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<style>
+:root{
+    --bg-card: rgba(255,255,255,.04);
+    --bg-hover: rgba(255,255,255,.06);
+    --border: rgba(255,255,255,.08);
+    --text: #e5e7eb;
+    --muted: #9ca3af;
+    --primary: #3b82f6;
+    --success: #22c55e;
+}
+
+.privacy-container{
+    max-width: 1300px;
+}
+
+.policy-hero{
+    background:
+        radial-gradient(circle at top right, rgba(59,130,246,.18), transparent 40%),
+        linear-gradient(135deg,
+            rgba(59,130,246,.08),
+            rgba(29,78,216,.03)
+        );
+    border:1px solid var(--border);
+    border-radius:24px;
+    padding:40px;
+    backdrop-filter:blur(20px);
+    margin-bottom:24px;
+}
+
+.policy-icon{
+    width:72px;
+    height:72px;
+    border-radius:18px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:linear-gradient(135deg,#3b82f6,#1d4ed8);
+    color:white;
+    font-size:30px;
+    box-shadow:0 15px 35px rgba(59,130,246,.35);
+}
+
+.policy-title{
+    color:white;
+    font-weight:800;
+    font-size:2.3rem;
+    margin-bottom:8px;
+}
+
+.policy-subtitle{
+    color:var(--muted);
+    font-size:1rem;
+}
+
+.status-badge{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:8px 14px;
+    border-radius:999px;
+    background:rgba(34,197,94,.12);
+    border:1px solid rgba(34,197,94,.25);
+    color:#4ade80;
+    font-weight:600;
+}
+
+.policy-card{
+    background:var(--bg-card);
+    border:1px solid var(--border);
+    border-radius:20px;
+    padding:24px;
+    height:100%;
+    transition:.25s ease;
+    backdrop-filter:blur(12px);
+}
+
+.policy-card:hover{
+    transform:translateY(-4px);
+    background:var(--bg-hover);
+    border-color:rgba(59,130,246,.25);
+}
+
+.policy-card h5{
+    color:white;
+    font-weight:700;
+    margin-bottom:14px;
+}
+
+.policy-card p{
+    color:var(--muted);
+    line-height:1.8;
+    margin:0;
+}
+
+.highlight-section{
+    background:linear-gradient(
+        135deg,
+        rgba(59,130,246,.10),
+        rgba(29,78,216,.04)
+    );
+    border:1px solid rgba(59,130,246,.15);
+    border-radius:22px;
+    padding:30px;
+    margin-top:24px;
+}
+
+.highlight-section h4{
+    color:white;
+    font-weight:700;
+    margin-bottom:12px;
+}
+
+.highlight-section p{
+    color:#cbd5e1;
+    margin-bottom:0;
+    line-height:1.8;
+}
+
+.contact-box{
+    margin-top:24px;
+    background:rgba(255,255,255,.03);
+    border:1px solid var(--border);
+    border-radius:20px;
+    padding:24px;
+}
+
+.contact-box h5{
+    color:white;
+    font-weight:700;
+}
+
+.contact-box p{
+    color:var(--muted);
+}
+
+.email-badge{
+    display:inline-flex;
+    align-items:center;
+    gap:10px;
+    padding:12px 18px;
+    border-radius:12px;
+    background:rgba(59,130,246,.12);
+    border:1px solid rgba(59,130,246,.2);
+    color:#dbeafe;
+    font-weight:600;
+    font-size:1rem;
+}
+
+.quick-stats{
+    display:flex;
+    flex-wrap:wrap;
+    gap:12px;
+    margin-top:18px;
+}
+
+.quick-pill{
+    padding:10px 16px;
+    border-radius:999px;
+    background:rgba(255,255,255,.04);
+    border:1px solid rgba(255,255,255,.08);
+    color:#cbd5e1;
+    font-size:.9rem;
+}
+
+@media(max-width:768px){
+
+    .policy-title{
+        font-size:1.8rem;
+    }
+
+    .policy-hero{
+        padding:28px;
+    }
+
+    .policy-icon{
+        width:60px;
+        height:60px;
+        font-size:24px;
+    }
+
+}
+</style>
+
+<div class="container privacy-container py-4">
+
+
+<!-- HERO -->
+
+<div class="policy-hero">
+
+    <div class="d-flex align-items-center gap-4 flex-wrap">
+
+        <div class="policy-icon">
+            <i class="bi bi-shield-lock-fill"></i>
+        </div>
+
+        <div>
+
+            <h1 class="policy-title">
+                Privacy Policy
+            </h1>
+
+            <p class="policy-subtitle">
+                Your privacy, security, and business data protection are our highest priorities.
+            </p>
+
+            <div class="mt-3">
+
+                <span class="status-badge">
+                    <i class="bi bi-check-circle-fill"></i>
+                    Last Updated: June 2026
+                </span>
+
+            </div>
+
+            <div class="quick-stats">
+
+                <span class="quick-pill">
+                    <i class="bi bi-shield-check"></i>
+                    Secure Platform
+                </span>
+
+                <span class="quick-pill">
+                    <i class="bi bi-database-lock"></i>
+                    Data Protected
+                </span>
+
+                <span class="quick-pill">
+                    <i class="bi bi-eye-slash"></i>
+                    No Data Sales
+                </span>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<!-- CONTENT -->
+
+<div class="row g-4">
+
+    <div class="col-lg-6">
+        <div class="policy-card">
+            <h5><i class="bi bi-person-vcard-fill text-primary"></i> Information We Collect</h5>
+            <p>
+                LedgerLite may collect account details, business information,
+                inventory records, invoices, customer information, analytics,
+                and platform usage data necessary to provide our services.
+            </p>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="policy-card">
+            <h5><i class="bi bi-gear-fill text-primary"></i> How Information Is Used</h5>
+            <p>
+                Information is used to operate LedgerLite, improve platform
+                functionality, generate reports, provide analytics, maintain
+                security, and deliver important account notifications.
+            </p>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="policy-card">
+            <h5><i class="bi bi-shield-lock-fill text-primary"></i> Security Measures</h5>
+            <p>
+                We implement secure authentication systems, encrypted
+                communications where applicable, access controls, monitoring,
+                and regular platform updates designed to safeguard user data.
+            </p>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="policy-card">
+            <h5><i class="bi bi-database-fill-check text-primary"></i> Data Ownership</h5>
+            <p>
+                Users retain ownership of all inventory, customer records,
+                invoices, reports, and business information stored within
+                LedgerLite.
+            </p>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="policy-card">
+            <h5><i class="bi bi-eye-slash-fill text-primary"></i> Data Sharing</h5>
+            <p>
+                LedgerLite does not sell user information. Information may
+                only be shared when legally required, necessary to protect
+                platform security, or required for essential service delivery.
+            </p>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="policy-card">
+            <h5><i class="bi bi-credit-card-2-front-fill text-primary"></i> Payment Security</h5>
+            <p>
+                Payments are processed through approved payment providers.
+                LedgerLite does not intentionally store complete payment card
+                details on its own infrastructure.
+            </p>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="policy-card">
+            <h5><i class="bi bi-cookie text-primary"></i> Cookies & Sessions</h5>
+            <p>
+                Cookies and session technologies may be used to maintain
+                secure login sessions, remember preferences, and improve
+                platform performance.
+            </p>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="policy-card">
+            <h5><i class="bi bi-person-check-fill text-primary"></i> User Rights</h5>
+            <p>
+                Users may request access to their information, correction
+                of inaccurate data, or account deletion where legally
+                permitted and technically feasible.
+            </p>
+        </div>
+    </div>
+
+</div>
+
+<!-- IMPORTANT -->
+
+<div class="highlight-section">
+
+    <h4>
+        <i class="bi bi-info-circle-fill"></i>
+        Your Commitment to Privacy
+    </h4>
+
+    <p>
+        LedgerLite is committed to maintaining a secure and trustworthy
+        platform. We continuously improve our systems and security practices
+        to help protect user information while delivering reliable inventory,
+        invoicing, and business management services.
+    </p>
+
+</div>
+
+<!-- CONTACT -->
+
+<div class="contact-box">
+
+    <h5>
+        <i class="bi bi-envelope-fill text-primary"></i>
+        Contact & Privacy Questions
+    </h5>
+
+    <p>
+        If you have questions regarding this Privacy Policy, data protection,
+        account security, or privacy concerns, please contact LedgerLite Support.
+    </p>
+
+    <div class="email-badge">
+        <i class="bi bi-envelope"></i>
+        hyndrrx0@gmail.com
+    </div>
+
+</div>
+
+
+</div>
+
+{% endblock %}

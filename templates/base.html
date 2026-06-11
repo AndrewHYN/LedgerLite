@@ -276,7 +276,7 @@ footer{
 
     <div class="container">
 
-     <a class="navbar-brand ledger-logo" href="#">
+     <a class="navbar-brand ledger-logo" href="{% url 'dashboard' %}">
     <span class="logo-box">L</span>
    
 </a>
@@ -413,7 +413,28 @@ footer{
             <i class="bi bi-plus-circle me-2"></i> Add Product
         </a>
     </li>
+<hr class="dropdown-divider">
+<!-- Terms and conditions, privacy policy, support -->
+<li>
+    <a class="dropdown-item" href="{% url 'terms' %}">
+        <i class="bi bi-shield-check me-2"></i>
+        Terms & Conditions
+    </a>
+</li>
 
+<li>
+    <a class="dropdown-item" href="{% url 'privacy' %}">
+        <i class="bi bi-lock-fill me-2"></i>
+        Privacy Policy
+    </a>
+</li>
+
+<li>
+    <a class="dropdown-item" href="{% url 'support' %}">
+        <i class="bi bi-headset me-2"></i>
+        Support
+    </a>
+</li>
     <li><hr class="dropdown-divider"></li>
 
     <li>

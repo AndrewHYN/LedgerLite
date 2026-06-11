@@ -15,6 +15,11 @@ from django.db.models import Sum
 from django.db.models.functions import TruncMonth
 
 from .models import CompanyProfile, Invoice, InvoiceItem, Product, Notification
+from django.shortcuts import render
+from django.shortcuts import render, redirect
+from django.contrib import messages
+
+from .forms import SupportTicketForm
 
 
 
@@ -771,3 +776,47 @@ def dashboard(request):
         # ✅ FIXED VALUE
         "low_stock_count": low_stock_count,
     })
+
+
+@login_required
+def terms(request):
+    return render(request, 'terms.html')
+
+
+@login_required
+def privacy(request):
+    return render(request, 'privacy.html')
+
+
+@login_required
+def support(request):
+
+    if request.method == "POST":
+
+        form = SupportTicketForm(request.POST)
+
+        if form.is_valid():
+
+            ticket = form.save(commit=False)
+
+            if request.user.is_authenticated:
+                ticket.user = request.user
+
+            ticket.save()
+
+            messages.success(
+                request,
+                "Support ticket submitted successfully."
+            )
+
+            return redirect('support')
+
+    else:
+
+        form = SupportTicketForm()
+
+    return render(
+        request,
+        'support.html',
+        {'form': form}
+    )

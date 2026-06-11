@@ -67,4 +67,8 @@ urlpatterns = [
     path("notifications/clear/", views.notifications_clear, name="notifications_clear"),
 
     path("notifications/read-all/", views.mark_all_notifications_read, name="mark_all_notifications_read"),
+    path('terms/', views.terms, name='terms'),
+    path('privacy/', views.privacy, name='privacy'),
+    path('support/',views.support, name='support'
+),
 ]
