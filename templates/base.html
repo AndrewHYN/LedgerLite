@@ -230,6 +230,42 @@ footer{
 .navbar-toggler {
     border: 1px solid rgba(255,255,255,.2);
 }
+.ledger-logo{
+    display:flex;
+    align-items:center;
+    text-decoration:none;
+    margin-right:10px;
+}
+
+.logo-box{
+    width:44px;
+    height:44px;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    border-radius:12px;
+
+    background:linear-gradient(135deg,#2563eb,#1e40af);
+
+    color:#fff;
+    font-size:1.4rem;
+    font-weight:900;
+
+    box-shadow:
+        0 8px 20px rgba(37,99,235,.35),
+        inset 0 1px 1px rgba(255,255,255,.25);
+
+    transition:all .25s ease;
+}
+
+.logo-box:hover{
+    transform:translateY(-2px);
+    box-shadow:
+        0 12px 28px rgba(37,99,235,.45),
+        inset 0 1px 1px rgba(255,255,255,.35);
+}
 </style>
 
 </head>
@@ -240,9 +276,10 @@ footer{
 
     <div class="container">
 
-        <a class="navbar-brand" href="{% url 'dashboard' %}">
-            LedgerLite
-        </a>
+     <a class="navbar-brand ledger-logo" href="#">
+    <span class="logo-box">L</span>
+   
+</a>
 <button class="navbar-toggler" type="button"
         data-bs-toggle="collapse"
         data-bs-target="#mainNavbar"
