@@ -21,7 +21,8 @@ from django.contrib import messages
 
 from .forms import SupportTicketForm
 
-
+from django.db import connection
+from django.http import HttpResponse
 
 
 
@@ -819,4 +820,12 @@ def support(request):
         request,
         'support.html',
         {'form': form}
+    )
+
+
+
+def db_check(request):
+    return HttpResponse(
+        f"Engine: {connection.settings_dict['ENGINE']}<br>"
+        f"Database: {connection.settings_dict['NAME']}"
     )

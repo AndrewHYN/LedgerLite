@@ -69,6 +69,6 @@ urlpatterns = [
     path("notifications/read-all/", views.mark_all_notifications_read, name="mark_all_notifications_read"),
     path('terms/', views.terms, name='terms'),
     path('privacy/', views.privacy, name='privacy'),
-    path('support/',views.support, name='support'
-),
+    path('support/',views.support, name='support'),
+    path("db-check/", views.db_check),
 ]
