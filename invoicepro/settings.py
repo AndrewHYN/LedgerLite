@@ -80,13 +80,12 @@ TEMPLATES = [
 
 #===================POSTGRESSQL=================
 DATABASES = {
-    'default': dj_database_url.config(
-        default=os.getenv("DATABASE_URL", "sqlite:///db.sqlite3"),
+    'default': dj_database_url.parse(
+        os.environ["DATABASE_URL"],
         conn_max_age=600,
         ssl_require=True
     )
 }
-
 # ================= PASSWORD VALIDATION =================
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
