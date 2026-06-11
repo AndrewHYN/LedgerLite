@@ -8,12 +8,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ================= SECURITY (DEV ONLY) =================
 SECRET_KEY = 'django-insecure-change-me'
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
-    '.onrender.com'
+    'ledgerlite-ij4y.onrender.com'
 ]
 
 
@@ -81,7 +81,9 @@ TEMPLATES = [
 #===================POSTGRESSQL=================
 DATABASES = {
     'default': dj_database_url.config(
-        default=os.environ.get("DATABASE_URL")
+        default=os.getenv("DATABASE_URL", "sqlite:///db.sqlite3"),
+        conn_max_age=600,
+        ssl_require=True
     )
 }
 
