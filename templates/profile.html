@@ -66,6 +66,7 @@ label {
     font-size: 12px;
     color: var(--muted);
     margin-bottom: 6px;
+    display: block;
 }
 
 /* INPUTS */
@@ -94,6 +95,39 @@ label {
     color: var(--muted);
     margin-bottom: 12px;
     letter-spacing: 0.3px;
+}
+
+/* LOGO PREVIEW */
+.logo-preview-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 15px;
+}
+
+.logo-preview {
+    width: 100px;
+    height: 100px;
+    border: 2px solid var(--primary);
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(59,130,246,0.1);
+}
+
+.logo-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.logo-preview-text {
+    font-size: 11px;
+    color: var(--muted);
+    font-style: italic;
 }
 
 /* BUTTONS */
@@ -161,9 +195,31 @@ label {
                        value="{{ profile.company_name }}">
 
                 <label>Logo</label>
+                
+                <!-- LOGO PREVIEW -->
+                {% if profile.company_logo %}
+                <div class="logo-preview-container">
+                    <div class="logo-preview">
+                        <img src="{{ profile.company_logo.url }}" alt="Current Logo">
+                    </div>
+                    <div class="logo-preview-text">Current logo — upload a new one to replace</div>
+                </div>
+                {% endif %}
+                
                 <input class="form-control"
                        type="file"
-                       name="company_logo">
+                       name="company_logo"
+                       accept="image/*"
+                       id="logoInput"
+                       onchange="previewLogo(event)">
+                
+                <!-- LIVE PREVIEW FOR NEW UPLOAD -->
+                <div id="newLogoPreview" style="display:none; margin-top:12px;">
+                    <div class="logo-preview">
+                        <img id="newLogoImg" src="" alt="New Logo Preview">
+                    </div>
+                    <div class="logo-preview-text">New logo preview</div>
+                </div>
             </div>
 
             <!-- CONTACT -->
@@ -243,5 +299,22 @@ label {
     </form>
 
 </div>
+
+<script>
+// Live preview for new logo upload
+function previewLogo(event) {
+    const file = event.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const previewContainer = document.getElementById('newLogoPreview');
+            const previewImg = document.getElementById('newLogoImg');
+            previewImg.src = e.target.result;
+            previewContainer.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+    }
+}
+</script>
 
 {% endblock %}
