@@ -73,16 +73,26 @@ button{
 .user-avatar{
     width:42px;
     height:42px;
-    border:none;
+    border:2px solid rgba(255,255,255,.15);
     border-radius:50%;
     overflow:hidden;
     display:flex;
     align-items:center;
     justify-content:center;
-    background:linear-gradient(135deg,#22c55e,#16a34a);
-    color:white;
+    background:linear-gradient(135deg,#3b82f6,#1e40af);
+    color:#0b1220;
     font-weight:700;
+    font-size:1.05rem;
     padding:0;
+    position:relative;
+    box-shadow:0 4px 12px rgba(59,130,246,.25);
+    transition:all .25s ease;
+}
+
+.user-avatar:hover{
+    box-shadow:0 6px 16px rgba(59,130,246,.40);
+    transform:translateY(-1px);
+    border-color:rgba(255,255,255,.25);
 }
 
 .user-avatar img{
@@ -204,7 +214,7 @@ footer{
     transition:.2s ease;
 }
 
-/* icon styling (this is what makes it look “app-like”) */
+/* icon styling (this is what makes it look "app-like") */
 .premium-menu .dropdown-item i{
     font-size:1.1rem;
     opacity:.9;
@@ -384,13 +394,16 @@ footer{
                 <div class="dropdown">
 
                     <button class="user-avatar dropdown-toggle"
-                            data-bs-toggle="dropdown">
+                            data-bs-toggle="dropdown"
+                            title="Profile">
 
                         {% if request.user.companyprofile and request.user.companyprofile.company_logo %}
-                            <img src="{{ request.user.companyprofile.company_logo.url }}">
-                        {% else %}
-                            {{ request.user.username|first|upper }}
+                            <img src="{{ request.user.companyprofile.company_logo.url }}" alt="{{ request.user.username }}" onerror="this.style.display='none'">
                         {% endif %}
+                        
+                        <span id="avatar-text" style="display:{% if request.user.companyprofile and request.user.companyprofile.company_logo %}none{% else %}block{% endif %};">
+                            {{ request.user.username|first|upper }}
+                        </span>
 
                     </button>
 
@@ -504,6 +517,17 @@ function clearAll(){
         headers:{"X-CSRFToken":getCSRF()}
     }).then(()=>location.reload());
 }
+
+// Handle broken images - show initials fallback
+document.addEventListener('DOMContentLoaded', function() {
+    const avatarImg = document.querySelector('.user-avatar img');
+    if (avatarImg) {
+        avatarImg.addEventListener('error', function() {
+            this.style.display = 'none';
+            document.getElementById('avatar-text').style.display = 'block';
+        });
+    }
+});
 
 </script>
 
