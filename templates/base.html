@@ -102,6 +102,18 @@ button{
     display:block;
 }
 
+.user-avatar .avatar-fallback{
+    display:none;
+}
+
+.user-avatar.show-fallback .avatar-fallback{
+    display:block;
+}
+
+.user-avatar.show-fallback img{
+    display:none;
+}
+
 .user-avatar::after{
     display:none !important;
 }
@@ -395,15 +407,16 @@ footer{
 
                     <button class="user-avatar dropdown-toggle"
                             data-bs-toggle="dropdown"
-                            title="Profile">
+                            title="Profile"
+                            id="userAvatarBtn">
 
                         {% if request.user.companyprofile and request.user.companyprofile.company_logo %}
-                            <img src="{{ request.user.companyprofile.company_logo.url }}" alt="{{ request.user.username }}" onerror="this.style.display='none'">
+                            <img src="{{ request.user.companyprofile.company_logo.url }}" 
+                                 alt="{{ request.user.username }}" 
+                                 onerror="handleAvatarError(this)">
                         {% endif %}
                         
-                        <span id="avatar-text" style="display:{% if request.user.companyprofile and request.user.companyprofile.company_logo %}none{% else %}block{% endif %};">
-                            {{ request.user.username|first|upper }}
-                        </span>
+                        <span class="avatar-fallback">{{ request.user.username|first|upper }}</span>
 
                     </button>
 
@@ -519,15 +532,12 @@ function clearAll(){
 }
 
 // Handle broken images - show initials fallback
-document.addEventListener('DOMContentLoaded', function() {
-    const avatarImg = document.querySelector('.user-avatar img');
-    if (avatarImg) {
-        avatarImg.addEventListener('error', function() {
-            this.style.display = 'none';
-            document.getElementById('avatar-text').style.display = 'block';
-        });
+function handleAvatarError(img) {
+    const btn = document.getElementById('userAvatarBtn');
+    if (btn) {
+        btn.classList.add('show-fallback');
     }
-});
+}
 
 </script>
 
