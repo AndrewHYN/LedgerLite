@@ -413,9 +413,10 @@ footer{
                         {% if request.user.companyprofile and request.user.companyprofile.company_logo %}
                             <img src="{{ request.user.companyprofile.company_logo.url }}" 
                                  alt="{{ request.user.username }}" 
+                                 onload="handleAvatarLoad()"
                                  onerror="handleAvatarError()">
                         {% else %}
-                            <span class="avatar-fallback">{{ request.user.username|first|upper }}</span>
+                            <span class="avatar-fallback" style="display:block;">{{ request.user.username|first|upper }}</span>
                         {% endif %}
 
                     </button>
@@ -531,15 +532,37 @@ function clearAll(){
     }).then(()=>location.reload());
 }
 
+// Handle successful image load - show the image
+function handleAvatarLoad() {
+    const btn = document.getElementById('userAvatarBtn');
+    if (btn) {
+        btn.classList.remove('show-fallback');
+        const img = btn.querySelector('img');
+        if (img) {
+            img.style.display = 'block';
+        }
+    }
+}
+
 // Handle broken images - show initials fallback
 function handleAvatarError() {
     const btn = document.getElementById('userAvatarBtn');
     if (btn) {
         btn.classList.add('show-fallback');
-        const fallback = document.createElement('span');
-        fallback.className = 'avatar-fallback';
-        fallback.textContent = btn.querySelector('img').alt.charAt(0).toUpperCase();
-        btn.appendChild(fallback);
+        const img = btn.querySelector('img');
+        if (img) {
+            img.style.display = 'none';
+        }
+        let fallback = btn.querySelector('.avatar-fallback');
+        if (!fallback) {
+            fallback = document.createElement('span');
+            fallback.className = 'avatar-fallback';
+            fallback.style.display = 'block';
+            fallback.textContent = btn.querySelector('img') ? btn.querySelector('img').alt.charAt(0).toUpperCase() : 'U';
+            btn.appendChild(fallback);
+        } else {
+            fallback.style.display = 'block';
+        }
     }
 }
 
