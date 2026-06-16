@@ -413,10 +413,10 @@ footer{
                         {% if request.user.companyprofile and request.user.companyprofile.company_logo %}
                             <img src="{{ request.user.companyprofile.company_logo.url }}" 
                                  alt="{{ request.user.username }}" 
-                                 onerror="handleAvatarError(this)">
+                                 onerror="handleAvatarError()">
+                        {% else %}
+                            <span class="avatar-fallback">{{ request.user.username|first|upper }}</span>
                         {% endif %}
-                        
-                        <span class="avatar-fallback">{{ request.user.username|first|upper }}</span>
 
                     </button>
 
@@ -532,10 +532,14 @@ function clearAll(){
 }
 
 // Handle broken images - show initials fallback
-function handleAvatarError(img) {
+function handleAvatarError() {
     const btn = document.getElementById('userAvatarBtn');
     if (btn) {
         btn.classList.add('show-fallback');
+        const fallback = document.createElement('span');
+        fallback.className = 'avatar-fallback';
+        fallback.textContent = btn.querySelector('img').alt.charAt(0).toUpperCase();
+        btn.appendChild(fallback);
     }
 }
 
