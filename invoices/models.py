@@ -83,6 +83,10 @@ class Invoice(models.Model):
     def __str__(self):
         return self.invoice_number
 
+    @property
+    def subtotal_amount(self):
+        return sum(item.quantity * item.price for item in self.items.all())
+
 
 # ======================
 # INVOICE ITEM
@@ -101,6 +105,10 @@ class InvoiceItem(models.Model):
 
     def __str__(self):
         return f"{self.description} ({self.quantity})"
+
+    @property
+    def subtotal(self):
+        return self.quantity * self.price
 
 
 # ======================

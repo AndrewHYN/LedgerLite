@@ -70,52 +70,47 @@ button{
 
 /* ================= USER AVATAR ================= */
 
+/* ================= USER AVATAR ================= */
+
 .user-avatar{
-    width:42px;
-    height:42px;
-    border:2px solid rgba(255,255,255,.15);
+    width:48px;
+    height:48px;
+
     border-radius:50%;
     overflow:hidden;
+
     display:flex;
     align-items:center;
     justify-content:center;
-    background:linear-gradient(135deg,#3b82f6,#1e40af);
-    color:#0b1220;
-    font-weight:700;
-    font-size:1.05rem;
+
     padding:0;
+    border:2px solid rgba(255,255,255,.15);
+
+    background:linear-gradient(135deg,#3b82f6,#1e40af);
+
+    box-shadow:0 0 18px rgba(59,130,246,.45);
+
+    cursor:pointer;
+
     position:relative;
-    box-shadow:0 4px 12px rgba(59,130,246,.25);
-    transition:all .25s ease;
 }
 
-.user-avatar:hover{
-    box-shadow:0 6px 16px rgba(59,130,246,.40);
-    transform:translateY(-1px);
-    border-color:rgba(255,255,255,.25);
+.user-avatar::after{
+    display:none !important;
 }
 
-.user-avatar img{
+.avatar-img{
     width:100%;
     height:100%;
     object-fit:cover;
     display:block;
 }
 
-.user-avatar .avatar-fallback{
-    display:none;
-}
-
-.user-avatar.show-fallback .avatar-fallback{
-    display:block;
-}
-
-.user-avatar.show-fallback img{
-    display:none;
-}
-
-.user-avatar::after{
-    display:none !important;
+.avatar-fallback{
+    color:#fff;
+    font-weight:700;
+    font-size:1.1rem;
+    line-height:1;
 }
 
 /* ================= NOTIFICATION DROPDOWN FIX ================= */
@@ -286,13 +281,124 @@ footer{
     transform:translateY(-2px);
     box-shadow:
         0 12px 28px rgba(37,99,235,.45),
-        inset 0 1px 1px rgba(255,255,255,.35);
+        inset 0 1px 1px rgba(255,255,255,0.35);
+}
+
+/* ================= TOASTS (2027 PREMIUM SAAS STYLE) ================= */
+.toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 1055;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 380px;
+    width: calc(100% - 48px);
+}
+
+.custom-toast {
+    background: rgba(10, 15, 25, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    border-radius: 14px;
+    padding: 16px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(20px);
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    transform: translateX(120%);
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease;
+    opacity: 0;
+}
+
+.custom-toast.show {
+    transform: translateX(0);
+    opacity: 1;
+}
+
+.custom-toast-icon {
+    font-size: 1.3rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.custom-toast-success .custom-toast-icon { color: #10b981; }
+.custom-toast-error .custom-toast-icon { color: #ef4444; }
+.custom-toast-warning .custom-toast-icon { color: #f59e0b; }
+.custom-toast-info .custom-toast-icon { color: #3b82f6; }
+
+.custom-toast-body {
+    flex-grow: 1;
+}
+
+.custom-toast-title {
+    font-weight: 700;
+    font-size: 0.95rem;
+    margin-bottom: 2px;
+    color: #ffffff !important;
+}
+
+.custom-toast-message {
+    font-size: 0.85rem;
+    color: #cbd5e1 !important;
+}
+
+.custom-toast-close {
+    background: transparent;
+    border: none;
+    color: #9ca3af;
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 0;
+    line-height: 1;
+    margin-left: auto;
+    transition: color 0.2s;
+}
+
+.custom-toast-close:hover {
+    color: #ffffff;
+}
+
+/* Glassmorphism dropdown lists */
+#notification-list-container::-webkit-scrollbar {
+    width: 6px;
+}
+#notification-list-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+#notification-list-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+#notification-list-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
 }
 </style>
 
 </head>
 
 <body>
+
+<div id="toast-container" class="toast-container"></div>
+
+{% if messages %}
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            {% for message in messages %}
+                // Try parsing message tag for alert mapping
+                let tag = "{{ message.tags|escapejs }}";
+                let title = tag.charAt(0).toUpperCase() + tag.slice(1);
+                if (!tag || tag === 'messages') {
+                    tag = 'info';
+                    title = 'Notice';
+                }
+                showToast(title, "{{ message|escapejs }}", tag);
+            {% endfor %}
+        });
+    </script>
+{% endif %}
 
 <nav class="navbar navbar-dark navbar-expand-lg">
 
@@ -332,15 +438,14 @@ footer{
 
                     <button class="btn position-relative text-light"
                             data-bs-toggle="dropdown"
-                            style="background:transparent;border:none;">
+                            style="background:transparent;border:none;"
+                            id="notification-bell-btn">
 
                         <i class="bi bi-bell" style="font-size:1.35rem;"></i>
 
-                        {% if unread_notifications_count %}
-                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
-                            {{ unread_notifications_count }}
-                        </span>
-                        {% endif %}
+                        <div id="notification-badge-container">
+                            <!-- Dynamic Badge -->
+                        </div>
 
                     </button>
 
@@ -348,78 +453,54 @@ footer{
                          style="width:340px;border-radius:14px;">
 
                         <div class="d-flex justify-content-between align-items-center px-2 py-1">
-                            <strong>Notifications</strong>
-
-                            <button class="btn btn-sm btn-outline-danger"
-                                    onclick="clearAll()">
-                                Clear All
-                            </button>
-                        </div>
-
-                        <hr>
-
-                        {% for n in notifications|slice:":7" %}
-
-                        <div class="p-2 mb-2 rounded"
-                             style="background:rgba(255,255,255,.04);">
-
-                            <div>
-                                <div style="font-weight:600;">{{ n.title }}</div>
-                                <div style="font-size:.85rem;color:#9ca3af;">
-                                    {{ n.message|truncatechars:60 }}
-                                </div>
+                            <strong style="color: #ffffff !important;">Notifications</strong>
+                            <div class="d-flex gap-1">
+                                <button class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size:0.7rem; border-color: rgba(59,130,246,0.3);"
+                                        onclick="markAllAsRead(event)">
+                                    Read All
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:0.7rem; border-color: rgba(239,68,68,0.3);"
+                                        onclick="clearAllNotifications(event)">
+                                    Clear All
+                                </button>
                             </div>
+                        </div>
 
-                            <div class="mt-2 d-flex gap-2">
+                        <hr class="my-2" style="border-color: rgba(255,255,255,0.08);">
 
-                                {% if not n.read %}
-                                <button class="btn btn-sm btn-success"
-                                        onclick="resolve({{ n.id }})">
-                                    Resolve
-                                </button>
-
-                                <button class="btn btn-sm btn-primary"
-                                        onclick="markOk({{ n.id }})">
-                                    Okay
-                                </button>
-                                {% endif %}
-
-                                <button class="btn btn-sm btn-outline-danger"
-                                        onclick="clearOne({{ n.id }})">
-                                    Clear
-                                </button>
-
+                        <div id="notification-list-container" style="max-height: 380px; overflow-y: auto;">
+                            <div class="text-center text-muted py-3">
+                                Loading...
                             </div>
-
                         </div>
-
-                        {% empty %}
-                        <div class="text-center text-muted py-3">
-                            No notifications
-                        </div>
-                        {% endfor %}
 
                     </div>
                 </div>
 
                 <!-- USER -->
-                <div class="dropdown">
+               <button class="user-avatar dropdown-toggle"
+        data-bs-toggle="dropdown"
+        title="Profile">
 
-                    <button class="user-avatar dropdown-toggle"
-                            data-bs-toggle="dropdown"
-                            title="Profile"
-                            id="userAvatarBtn">
+    {% if request.user.companyprofile and request.user.companyprofile.company_logo %}
+        <img
+            src="{{ request.user.companyprofile.company_logo.url }}"
+            alt="{{ request.user.username }}"
+            class="avatar-img"
+            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
 
-                        {% if request.user.companyprofile and request.user.companyprofile.company_logo %}
-                            <img src="{{ request.user.companyprofile.company_logo.url }}" 
-                                 alt="{{ request.user.username }}" 
-                                 onload="handleAvatarLoad()"
-                                 onerror="handleAvatarError()">
-                        {% else %}
-                            <span class="avatar-fallback" style="display:block;">{{ request.user.username|first|upper }}</span>
-                        {% endif %}
+        <span class="avatar-fallback" style="display:none;">
+            {{ request.user.username|first|upper }}
+        </span>
 
-                    </button>
+    {% else %}
+        <span class="avatar-fallback">
+            {{ request.user.username|first|upper }}
+        </span>
+    {% endif %}
+
+</button>
+
 
                     <ul class="dropdown-menu dropdown-menu-end premium-menu">
 
@@ -504,67 +585,296 @@ function getCSRF(){
         ?.split('=')[1];
 }
 
-function resolve(id){
-    fetch(`/notifications/${id}/resolve/`, {
-        method:"POST",
-        headers:{"X-CSRFToken":getCSRF()}
-    }).then(()=>location.reload());
-}
-
-function markOk(id){
-    fetch(`/notifications/${id}/ok/`, {
-        method:"POST",
-        headers:{"X-CSRFToken":getCSRF()}
-    }).then(()=>location.reload());
-}
-
-function clearOne(id){
-    fetch(`/notifications/${id}/clear/`, {
-        method:"POST",
-        headers:{"X-CSRFToken":getCSRF()}
-    }).then(()=>location.reload());
-}
-
-function clearAll(){
-    fetch(`/notifications/clear-all/`, {
-        method:"POST",
-        headers:{"X-CSRFToken":getCSRF()}
-    }).then(()=>location.reload());
-}
-
-// Handle successful image load - show the image
-function handleAvatarLoad() {
-    const btn = document.getElementById('userAvatarBtn');
-    if (btn) {
-        btn.classList.remove('show-fallback');
-        const img = btn.querySelector('img');
-        if (img) {
-            img.style.display = 'block';
-        }
+/* ================= TOAST NOTIFICATION ENGINE ================= */
+function showToast(title, message, type = 'info') {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container';
+        document.body.appendChild(container);
     }
+    
+    const toast = document.createElement('div');
+    toast.className = `custom-toast custom-toast-${type}`;
+    
+    let iconClass = 'bi-info-circle';
+    if (type === 'success') iconClass = 'bi-check-circle';
+    if (type === 'error' || type === 'danger') {
+        iconClass = 'bi-x-circle';
+        toast.className = `custom-toast custom-toast-error`;
+    }
+    if (type === 'warning') iconClass = 'bi-exclamation-triangle';
+    
+    toast.innerHTML = `
+        <i class="bi ${iconClass} custom-toast-icon"></i>
+        <div class="custom-toast-body">
+            <div class="custom-toast-title">${title}</div>
+            <div class="custom-toast-message">${message}</div>
+        </div>
+        <button class="custom-toast-close" onclick="this.parentElement.classList.remove('show'); setTimeout(() => this.parentElement.remove(), 400);">&times;</button>
+    `;
+    
+    container.appendChild(toast);
+    
+    // Trigger slide-in animation
+    setTimeout(() => {
+        toast.classList.add('show');
+    }, 50);
+    
+    // Auto remove after 4.5 seconds
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.classList.remove('show');
+            setTimeout(() => {
+                if (toast.parentNode) toast.remove();
+            }, 400);
+        }
+    }, 4500);
 }
 
-// Handle broken images - show initials fallback
-function handleAvatarError() {
-    const btn = document.getElementById('userAvatarBtn');
-    if (btn) {
-        btn.classList.add('show-fallback');
-        const img = btn.querySelector('img');
-        if (img) {
-            img.style.display = 'none';
-        }
-        let fallback = btn.querySelector('.avatar-fallback');
-        if (!fallback) {
-            fallback = document.createElement('span');
-            fallback.className = 'avatar-fallback';
-            fallback.style.display = 'block';
-            fallback.textContent = btn.querySelector('img') ? btn.querySelector('img').alt.charAt(0).toUpperCase() : 'U';
-            btn.appendChild(fallback);
+/* ================= DYNAMIC NOTIFICATIONS CLIENT ================= */
+function escapeHTML(str) {
+    if (!str) return '';
+    return str.replace(/[&<>'"]/g, 
+        tag => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            "'": '&#39;',
+            '"': '&quot;'
+        }[tag] || tag)
+    );
+}
+
+function updateNotificationsUI(data) {
+    const unreadCount = data.unread_count;
+    const notifications = data.notifications || [];
+    
+    // 1. Update Badge
+    const badgeContainer = document.getElementById('notification-badge-container');
+    if (badgeContainer) {
+        if (unreadCount > 0) {
+            badgeContainer.innerHTML = `
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="notification-badge" style="font-size:0.7rem; padding:0.25em 0.5em;">
+                    ${unreadCount}
+                </span>`;
         } else {
-            fallback.style.display = 'block';
+            badgeContainer.innerHTML = '';
         }
     }
+
+    // 2. Update List
+    const listContainer = document.getElementById('notification-list-container');
+    if (listContainer) {
+        if (notifications.length === 0) {
+            listContainer.innerHTML = `
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-bell-slash d-block mb-2" style="font-size:1.5rem; opacity:0.5;"></i>
+                    No notifications
+                </div>`;
+            return;
+        }
+
+        let html = '';
+        notifications.forEach(n => {
+            let actionButtons = '';
+            if (!n.read) {
+                actionButtons = `
+                    <button class="btn btn-sm btn-success py-1 px-2" style="font-size:0.7rem; font-weight:600;" onclick="resolveNotification(${n.id}, event)">
+                        Resolve
+                    </button>
+                    <button class="btn btn-sm btn-primary py-1 px-2" style="font-size:0.7rem; font-weight:600;" onclick="markNotificationOk(${n.id}, event)">
+                        Okay
+                    </button>`;
+            }
+            
+            html += `
+                <div class="p-2 mb-2 rounded" style="background:rgba(255,255,255,.04); border-left: 3px solid ${n.read ? 'transparent' : '#3b82f6'}; transition: all 0.3s ease; transform: translateX(0); opacity: 1;" id="notif-item-${n.id}">
+                    <div>
+                        <div style="font-weight:600; font-size:0.85rem; display:flex; justify-content:space-between; align-items:center; color:#ffffff !important;">
+                            <span>${escapeHTML(n.title)}</span>
+                            <span style="font-size:0.7rem; color:#9ca3af !important; font-weight:normal;">${n.created_at}</span>
+                        </div>
+                        <div style="font-size:.8rem;color:#cbd5e1 !important; margin-top: 4px; line-height:1.3;">
+                            ${escapeHTML(n.message)}
+                        </div>
+                    </div>
+                    <div class="mt-2 d-flex gap-2 justify-content-end">
+                        ${actionButtons}
+                        <button class="btn btn-sm btn-outline-danger py-1 px-2" style="font-size:0.7rem; font-weight:500; border-color: rgba(239,68,68,0.2);" onclick="deleteNotification(${n.id}, event)">
+                            Clear
+                        </button>
+                    </div>
+                </div>`;
+        });
+        listContainer.innerHTML = html;
+    }
 }
+
+let activeNotificationCheck = false;
+
+function fetchNotifications() {
+    if (activeNotificationCheck) return;
+    activeNotificationCheck = true;
+    fetch('/notifications/api/')
+        .then(response => {
+            if (!response.ok) throw new Error("API issues");
+            return response.json();
+        })
+        .then(data => {
+            updateNotificationsUI(data);
+        })
+        .catch(err => console.log("Silent error polling notifications:", err))
+        .finally(() => {
+            activeNotificationCheck = false;
+        });
+}
+
+function resolveNotification(id, event) {
+    if (event) event.stopPropagation();
+    const el = document.getElementById(`notif-item-${id}`);
+    if (el) el.style.opacity = '0.5';
+
+    fetch(`/notifications/${id}/resolve/`, {
+        method: "POST",
+        headers: {
+            "X-CSRFToken": getCSRF(),
+            "Content-Type": "application/json"
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showToast("Notification Resolved", "Issue marked as resolved.", "success");
+            if (data.redirect_url) {
+                window.location.href = data.redirect_url;
+            } else {
+                fetchNotifications();
+            }
+        } else {
+            fetchNotifications();
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        fetchNotifications();
+    });
+}
+
+function markNotificationOk(id, event) {
+    if (event) event.stopPropagation();
+    const el = document.getElementById(`notif-item-${id}`);
+    if (el) el.style.opacity = '0.5';
+
+    fetch(`/notifications/${id}/ok/`, {
+        method: "POST",
+        headers: {
+            "X-CSRFToken": getCSRF(),
+            "Content-Type": "application/json"
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showToast("Success", "Notification marked as read.", "success");
+        }
+        fetchNotifications();
+    })
+    .catch(err => {
+        console.error(err);
+        fetchNotifications();
+    });
+}
+
+function deleteNotification(id, event) {
+    if (event) event.stopPropagation();
+    const el = document.getElementById(`notif-item-${id}`);
+    if (el) {
+        el.style.transform = 'translateX(60px)';
+        el.style.opacity = '0';
+        setTimeout(() => el.remove(), 300);
+    }
+
+    fetch(`/notifications/${id}/delete/`, {
+        method: "POST",
+        headers: {
+            "X-CSRFToken": getCSRF(),
+            "Content-Type": "application/json"
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showToast("Cleared", "Notification removed.", "info");
+        }
+        fetchNotifications();
+    })
+    .catch(err => {
+        console.error(err);
+        fetchNotifications();
+    });
+}
+
+function clearAllNotifications(event) {
+    if (event) event.stopPropagation();
+    const listContainer = document.getElementById('notification-list-container');
+    if (listContainer) {
+        listContainer.innerHTML = `
+            <div class="text-center text-muted py-4">
+                No notifications
+            </div>`;
+    }
+
+    fetch('/notifications/clear/', {
+        method: "POST",
+        headers: {
+            "X-CSRFToken": getCSRF(),
+            "Content-Type": "application/json"
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showToast("Cleared All", "All alerts cleared.", "warning");
+        }
+        fetchNotifications();
+    })
+    .catch(err => {
+        console.error(err);
+        fetchNotifications();
+    });
+}
+
+function markAllAsRead(event) {
+    if (event) event.stopPropagation();
+    fetch('/notifications/read-all/', {
+        method: "POST",
+        headers: {
+            "X-CSRFToken": getCSRF(),
+            "Content-Type": "application/json"
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showToast("Read All", "All alerts marked as read.", "success");
+        }
+        fetchNotifications();
+    })
+    .catch(err => {
+        console.error(err);
+        fetchNotifications();
+    });
+}
+
+// Initial pull & start polling
+document.addEventListener("DOMContentLoaded", () => {
+    fetchNotifications();
+    setInterval(fetchNotifications, 10000); // Check every 10 seconds
+});
+
+
 
 </script>
 

@@ -66,6 +66,8 @@ def register(request):
         login(request, user)
         return redirect("dashboard")
 
+    return render(request, "register.html")
+
 
 # ======================
 # LOGIN
@@ -258,12 +260,14 @@ def edit_invoice(request, invoice_id):
         invoice.save()
 
         item_ids = request.POST.getlist("item_id[]")
+        descriptions = request.POST.getlist("description[]")
         quantities = request.POST.getlist("quantity[]")
         prices = request.POST.getlist("price[]")
 
-        for item_id, qty, price in zip(item_ids, quantities, prices):
+        for item_id, desc, qty, price in zip(item_ids, descriptions, quantities, prices):
             try:
                 item = InvoiceItem.objects.get(id=item_id, invoice=invoice)
+                item.description = desc.strip()
                 item.quantity = int(qty or 0)
                 item.price = Decimal(price or "0")
                 item.save()
@@ -732,7 +736,7 @@ def mark_all_notifications_read(request):
 # -------------------------
 @login_required
 def all_invoices(request):
-    invoices = Invoice.objects.all().order_by("-date_created")
+    invoices = Invoice.objects.filter(owner=request.user).order_by("-date_created")
     return render(request, "all_invoices.html", {"invoices": invoices})
 
 
