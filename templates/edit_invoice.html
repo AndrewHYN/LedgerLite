@@ -102,6 +102,7 @@ body {
 <div class="saas-card">
 
     <h2 class="mb-3 fw-bold">Edit Invoice</h2>
+    <p class="text-muted">Quantity changes reconcile stock against the original product name. If a product has been renamed or duplicated, keep the original quantity and adjust inventory separately.</p>
 
     <form method="POST">
         {% csrf_token %}
@@ -149,7 +150,7 @@ body {
                     <label class="form-label">Qty</label>
                     <input type="number" class="form-control"
                            name="quantity[]"
-                           value="{{ item.quantity }}">
+                           value="{{ item.quantity }}" min="1" required>
                 </div>
 
                 <div class="col-md-3">
@@ -157,7 +158,7 @@ body {
                     <input type="number" step="0.01"
                            class="form-control"
                            name="price[]"
-                           value="{{ item.price }}">
+                           value="{{ item.price }}" min="0" required>
                 </div>
 
                 <div class="col-md-2 d-flex align-items-end">
