@@ -125,13 +125,17 @@ def products(request):
         is_deleted=False
     ).order_by("name")
 
-    low_stock_products = products.filter(stock__lte=5)
+    low_stock_products = products.filter(stock__gt=0, stock__lte=5)
 
     low_stock_count = low_stock_products.count()
+    out_of_stock_count = products.filter(stock__lte=0).count()
+    inventory_retail_value = sum((p.inventory_value for p in products), Decimal("0.00"))
 
     return render(request, "products.html", {
         "products": products,
         "low_stock_count": low_stock_count,
+        "out_of_stock_count": out_of_stock_count,
+        "inventory_retail_value": inventory_retail_value,
     })
 
 
@@ -423,12 +427,12 @@ def invoice_pdf(request, invoice_id):
                     margin + 12, height - 138, width=62, height=62,
                     preserveAspectRatio=True, anchor="c", mask="auto",
                 )
-        except (OSError, ValueError, TypeError):
-            pass  # A missing logo should never prevent invoice export.
+        except Exception:
+            pass  # A missing or inaccessible remote logo must not prevent invoice export.
         finally:
             try:
                 profile.company_logo.close()
-            except OSError:
+            except Exception:
                 pass
 
     company_name = (
@@ -579,7 +583,7 @@ def analytics(request):
 
     product_count = products.count()
 
-    low_stock_count = products.filter(stock__lte=5).count()
+    low_stock_count = products.filter(stock__gt=0, stock__lte=5).count()
     out_of_stock_count = products.filter(stock=0).count()
 
     top_products = (
@@ -878,7 +882,7 @@ def dashboard(request):
 
     # ✅ ADD THIS (CRITICAL FIX)
     products = Product.objects.filter(owner=request.user, is_deleted=False)
-    low_stock_count = products.filter(stock__lte=5).count()
+    low_stock_count = products.filter(stock__gt=0, stock__lte=5).count()
 
     return render(request, "dashboard.html", {
         "invoices": invoices[:5],
@@ -893,12 +897,10 @@ def dashboard(request):
     })
 
 
-@login_required
 def terms(request):
     return render(request, 'terms.html')
 
 
-@login_required
 def privacy(request):
     return render(request, 'privacy.html')
 
