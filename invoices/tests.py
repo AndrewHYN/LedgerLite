@@ -7,7 +7,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import Invoice, Product
+from .models import Invoice, InvoiceItem, Product
 
 
 class InvoiceSafetyTests(TestCase):
@@ -119,6 +119,71 @@ class InvoiceSafetyTests(TestCase):
     def test_database_diagnostic_removed(self):
         self.client.logout()
         self.assertEqual(self.client.get("/db-check/").status_code, 404)
+
+
+    def test_pdf_supports_long_invoices(self):
+        invoice = Invoice.objects.create(
+            owner=self.owner, invoice_number="INV-LONG",
+            customer_name="Customer", customer_phone="+263770000000",
+        )
+        InvoiceItem.objects.bulk_create([
+            InvoiceItem(
+                invoice=invoice, description=f"Service line {i} with a descriptive product title",
+                quantity=1, price=Decimal("1.25"),
+            )
+            for i in range(45)
+        ])
+        invoice.update_total()
+        response = self.client.get(reverse("invoice_pdf", args=[invoice.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertTrue(response.content.startswith(b"%PDF"))
+        self.assertGreater(len(response.content), 3000)
+
+    def test_csv_blocks_spreadsheet_formula_injection(self):
+        Invoice.objects.create(
+            owner=self.owner, invoice_number="INV-CSV", customer_name="=HYPERLINK()"
+        )
+        response = self.client.get(reverse("export_invoices_csv"))
+        rows = list(csv.reader(StringIO(response.content.decode("utf-8"))))
+        self.assertEqual(rows[1][1], "'=HYPERLINK()")
+
+    def test_renamed_products_reject_unsafe_quantity_edits(self):
+        self.sale()
+        invoice = Invoice.objects.get(owner=self.owner)
+        self.soap.name = "New product name"
+        self.soap.save(update_fields=["name"])
+        self.edit(invoice, 4)
+        self.assertEqual(invoice.items.get().quantity, 2)
+        self.soap.refresh_from_db()
+        self.assertEqual(self.soap.stock, 8)
+
+    def test_inventory_stats_count_low_and_out_separately(self):
+        self.soap.stock = 0
+        self.soap.save(update_fields=["stock"])
+        response = self.client.get(reverse("products"))
+        self.assertEqual(response.context["low_stock_count"], 0)
+        self.assertEqual(response.context["out_of_stock_count"], 1)
+        self.assertEqual(response.context["inventory_retail_value"], Decimal("0.00"))
+
+    def test_product_negative_price_is_rejected(self):
+        self.client.post(reverse("add_product"), {
+            "name": "Unsafe product", "price": "-1.00", "stock": "2"
+        })
+        self.assertFalse(Product.objects.filter(name="Unsafe product").exists())
+
+    def test_negative_restock_does_not_modify_stock(self):
+        self.client.post(reverse("restock"), {
+            "product_id": self.soap.pk, "quantity": "-10"
+        })
+        self.soap.refresh_from_db()
+        self.assertEqual(self.soap.stock, 10)
+
+    def test_policy_pages_visible_before_sign_up(self):
+        self.client.logout()
+        for name in ("terms", "privacy"):
+            self.assertEqual(self.client.get(reverse(name)).status_code, 200)
+
 
 
 class RegistrationTests(TestCase):
