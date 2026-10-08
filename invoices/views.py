@@ -240,42 +240,90 @@ def create_invoice(request):
 # ======================
 @login_required
 def edit_invoice(request, invoice_id):
-
-    run_stock_check(request.user)
-
-    invoice = get_object_or_404(Invoice, id=invoice_id, owner=request.user)
-
+    """Adjust line quantities only when original inventory can be reconciled."""
+    invoice = get_object_or_404(Invoice, pk=invoice_id, owner=request.user)
     if request.method == "POST":
-
-        invoice.customer_name = request.POST.get("customer_name", "").strip()
-        invoice.customer_phone = request.POST.get("customer_phone", "").strip()
-
         try:
-            invoice.discount = Decimal(request.POST.get("discount", "0"))
-        except InvalidOperation:
-            invoice.discount = Decimal("0.00")
-
-        invoice.save()
-
-        item_ids = request.POST.getlist("item_id[]")
-        descriptions = request.POST.getlist("description[]")
-        quantities = request.POST.getlist("quantity[]")
-        prices = request.POST.getlist("price[]")
-
-        for item_id, desc, qty, price in zip(item_ids, descriptions, quantities, prices):
-            try:
-                item = InvoiceItem.objects.get(id=item_id, invoice=invoice)
-                item.description = desc.strip()
-                item.quantity = int(qty or 0)
-                item.price = Decimal(price or "0")
-                item.save()
-            except:
-                continue
-
-        invoice.update_total()
-
+            ids = request.POST.getlist("item_id[]")
+            descs = request.POST.getlist("description[]")
+            quantities = request.POST.getlist("quantity[]")
+            prices = request.POST.getlist("price[]")
+            if not (len(ids) == len(descs) == len(quantities) == len(prices)):
+                raise ValueError("All invoice lines are required.")
+            discount = Decimal(request.POST.get("discount") or "0")
+            if not discount.is_finite() or discount < 0:
+                raise ValueError("Enter a non-negative discount.")
+            with transaction.atomic():
+                invoice = get_object_or_404(
+                    Invoice.objects.select_for_update(), pk=invoice_id, owner=request.user
+                )
+                existing = list(invoice.items.select_for_update().order_by("pk"))
+                by_id = {str(item.pk): item for item in existing}
+                if len(ids) != len(existing) or set(ids) != set(by_id):
+                    raise ValueError("Invoice lines have changed. Refresh and try again.")
+                new_values = []
+                stock_deltas = {}
+                subtotal = Decimal("0.00")
+                for raw_id, description, raw_qty, raw_price in zip(ids, descs, quantities, prices):
+                    item = by_id[raw_id]
+                    quantity = int(raw_qty)
+                    price = Decimal(raw_price)
+                    description = description.strip()
+                    if (
+                        not description or len(description) > 255
+                        or quantity <= 0 or quantity > 100000000
+                        or not price.is_finite() or price < 0
+                        or price > Decimal("99999999.99")
+                        or price.as_tuple().exponent < -2
+                    ):
+                        raise ValueError("Invoice lines need a description, positive quantity and valid price.")
+                    subtotal += quantity * price
+                    delta = quantity - item.quantity
+                    if delta:
+                        matches = list(
+                            Product.objects.select_for_update()
+                            .filter(owner=request.user, name=item.description)
+                            .order_by("pk")[:2]
+                        )
+                        if len(matches) != 1:
+                            raise ValueError(
+                                "Cannot adjust quantity: the original product is missing or duplicated. "
+                                "Keep the existing quantity, or correct stock manually."
+                            )
+                        product = matches[0]
+                        if delta > 0 and product.is_deleted:
+                            raise ValueError("Cannot use more stock from an archived product.")
+                        stock_deltas[product.pk] = stock_deltas.get(product.pk, 0) + delta
+                    new_values.append((item, description, quantity, price))
+                if discount > subtotal:
+                    raise ValueError("Discount cannot exceed the subtotal.")
+                for product_id, delta in stock_deltas.items():
+                    if delta > 0:
+                        count = Product.objects.filter(
+                            pk=product_id, owner=request.user, is_deleted=False,
+                            stock__gte=delta,
+                        ).update(stock=F("stock") - delta)
+                        if not count:
+                            raise ValueError("Insufficient stock for the updated invoice.")
+                    elif delta < 0:
+                        Product.objects.filter(pk=product_id, owner=request.user).update(
+                            stock=F("stock") + (-delta)
+                        )
+                for item, description, quantity, price in new_values:
+                    item.description = description
+                    item.quantity = quantity
+                    item.price = price
+                    item.save(update_fields=["description", "quantity", "price"])
+                invoice.customer_name = request.POST.get("customer_name", "").strip()[:255]
+                invoice.customer_phone = request.POST.get("customer_phone", "").strip()[:50]
+                invoice.discount = discount
+                invoice.save(update_fields=["customer_name", "customer_phone", "discount"])
+                invoice.update_total()
+        except (InvalidOperation, ValueError, OverflowError) as exc:
+            messages.error(request, str(exc) or "Please correct the invoice details.")
+            return redirect("edit_invoice", invoice_id=invoice_id)
+        messages.success(request, "Invoice changes saved and stock reconciled.")
         return redirect("invoice_detail", invoice.id)
-
     return render(request, "edit_invoice.html", {"invoice": invoice})
 
 
