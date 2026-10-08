@@ -368,105 +368,129 @@ def delete_invoice(request, invoice_id):
 # ======================
 @login_required
 def invoice_pdf(request, invoice_id):
-
-    invoice = get_object_or_404(Invoice, id=invoice_id, owner=request.user)
-
+    """Render a printable, multi-page invoice for its owner."""
+    invoice = get_object_or_404(
+        Invoice.objects.prefetch_related("items"),
+        pk=invoice_id, owner=request.user,
+    )
     profile = CompanyProfile.objects.filter(user=request.user).first()
-
     response = HttpResponse(content_type="application/pdf")
-    response["Content-Disposition"] = f'attachment; filename="invoice_{invoice.invoice_number}.pdf"'
+    filename = slugify(invoice.invoice_number) or f"invoice-{invoice.pk}"
+    response["Content-Disposition"] = f'attachment; filename="{filename}.pdf"'
+    response["Cache-Control"] = "private, no-store"
 
-    p = canvas.Canvas(response)
+    p = canvas.Canvas(response, pagesize=A4)
+    width, height = A4
+    ink = colors.HexColor("#12283c")
+    muted = colors.HexColor("#61758a")
+    accent = colors.HexColor("#087e80")
+    light = colors.HexColor("#edf4f5")
+    margin = 44
+    p.setTitle(f"Invoice {invoice.invoice_number}")
+    page_num = 1
 
-    width, height = 595, 842
-    y = height - 50
+    def text(x, y, value, size=10, bold=False, color=ink):
+        p.setFillColor(color)
+        p.setFont("Helvetica-Bold" if bold else "Helvetica", size)
+        p.drawString(x, y, str(value or ""))
 
-    header_height = 90
+    def page_footer():
+        p.setStrokeColor(colors.HexColor("#d7e4e8"))
+        p.line(margin, 46, width - margin, 46)
+        text(margin, 30, "Generated with LedgerLite", 8, color=muted)
+        p.setFont("Helvetica", 8)
+        p.setFillColor(muted)
+        p.drawRightString(width - margin, 30, f"Page {page_num}")
 
-    p.setStrokeColorRGB(0.1, 0.1, 0.1)
-    p.setLineWidth(1)
-    p.rect(30, y - header_height, width - 60, header_height, stroke=1, fill=0)
+    def table_heading(y):
+        p.setFillColor(ink)
+        p.roundRect(margin, y - 16, width - 2 * margin, 30, 5, fill=1, stroke=0)
+        text(margin + 10, y - 4, "DESCRIPTION", 9, True, colors.white)
+        text(330, y - 4, "QTY", 9, True, colors.white)
+        text(386, y - 4, "PRICE", 9, True, colors.white)
+        text(475, y - 4, "AMOUNT", 9, True, colors.white)
+        return y - 32
 
-    logo_x = 40
-    logo_y = y - 70
-
+    p.setFillColor(light)
+    p.roundRect(margin, height - 160, width - 2 * margin, 120, 12, stroke=0, fill=1)
     if profile and profile.company_logo:
         try:
-            p.drawImage(
-                profile.company_logo.path,
-                logo_x,
-                logo_y,
-                width=60,
-                height=60,
-                preserveAspectRatio=True,
-                mask='auto'
-            )
-        except:
-            p.setFont("Helvetica-Bold", 10)
-            p.drawString(logo_x, logo_y + 20, "LOGO")
+            profile.company_logo.open("rb")
+            logo_bytes = profile.company_logo.read()
+            if len(logo_bytes) <= 4 * 1024 * 1024:
+                p.drawImage(
+                    ImageReader(BytesIO(logo_bytes)),
+                    margin + 12, height - 138, width=62, height=62,
+                    preserveAspectRatio=True, anchor="c", mask="auto",
+                )
+        except (OSError, ValueError, TypeError):
+            pass  # A missing logo should never prevent invoice export.
+        finally:
+            try:
+                profile.company_logo.close()
+            except OSError:
+                pass
 
-    text_x = 120
-    text_y = y - 35
-
-    company_name = profile.company_name if profile else "LedgerLite Business"
-
-    p.setFont("Helvetica-Bold", 14)
-    p.drawString(text_x, text_y, company_name)
-
-    p.setFont("Helvetica", 9)
-
+    company_name = (
+        profile.company_name if profile and profile.company_name else "LedgerLite Business"
+    )
+    for i, part in enumerate(simpleSplit(company_name, "Helvetica-Bold", 13, 235)[:2]):
+        text(126, height - 76 - 16 * i, part, 13, True)
     if profile:
-        p.drawString(text_x, text_y - 15, f"Email: {profile.company_email or '-'}")
-        p.drawString(text_x, text_y - 27, f"Phone: {profile.company_phone or '-'}")
-
+        text(126, height - 116, (profile.company_email or "")[:39], 9, color=muted)
+        text(126, height - 130, (profile.company_phone or "")[:39], 9, color=muted)
+    p.setFillColor(accent)
     p.setFont("Helvetica-Bold", 22)
-    p.drawRightString(width - 50, y - 40, "INVOICE")
+    p.drawRightString(width - margin - 13, height - 78, "INVOICE")
 
-    y -= 120
-
-    p.setFont("Helvetica-Bold", 11)
-    p.drawString(40, y, "Bill To:")
-
-    y -= 15
-    p.setFont("Helvetica", 10)
-    p.drawString(40, y, f"{invoice.customer_name}")
-
-    y -= 15
-    p.drawString(40, y, f"Phone: {invoice.customer_phone}")
-
-    y -= 25
-
-    p.line(40, y, width - 40, y)
-    y -= 25
-
-    p.setFont("Helvetica-Bold", 11)
-    p.drawString(40, y, "Item")
-    p.drawString(300, y, "Qty")
-    p.drawString(370, y, "Price")
-    p.drawString(460, y, "Total")
-
-    y -= 20
-
-    subtotal = Decimal("0.00")
+    y = height - 191
+    text(margin, y, "BILL TO", 9, True, accent)
+    text(margin, y - 20, invoice.customer_name or "Customer", 11, True)
+    text(margin, y - 36, invoice.customer_phone, 9, color=muted)
+    text(360, y, "INVOICE NUMBER", 9, True, accent)
+    text(360, y - 20, invoice.invoice_number, 10, True)
+    text(360, y - 36, timezone.localtime(invoice.date_created).strftime("%d %b %Y"), 9, color=muted)
+    y = table_heading(y - 70)
 
     for item in invoice.items.all():
+        parts = simpleSplit(item.description or "-", "Helvetica", 10, 265) or ["-"]
+        row_height = max(34, len(parts) * 14 + 12)
+        if y - row_height < 114:
+            page_footer()
+            p.showPage()
+            page_num += 1
+            text(margin, height - 54, f"Invoice {invoice.invoice_number} (continued)", 11, True)
+            y = table_heading(height - 90)
+        p.setStrokeColor(colors.HexColor("#e1e9ef"))
+        p.line(margin, y - row_height + 6, width - margin, y - row_height + 6)
+        for index, line in enumerate(parts):
+            text(margin + 10, y - 13 - 14 * index, line)
+        text(330, y - 13, item.quantity)
+        text(386, y - 13, f"${item.price:,.2f}")
+        text(475, y - 13, f"${item.subtotal:,.2f}", bold=True)
+        y -= row_height
 
-        line_total = item.quantity * item.price
-        subtotal += line_total
-
-        p.drawString(40, y, str(item.description))
-        p.drawString(300, y, str(item.quantity))
-        p.drawString(370, y, f"${item.price}")
-        p.drawString(460, y, f"${line_total}")
-
-        y -= 18
-
-    p.setFont("Helvetica-Bold", 11)
-    p.drawString(320, y - 20, "TOTAL:")
-    p.drawString(460, y - 20, f"${invoice.total}")
-
+    if y < 160:
+        page_footer()
+        p.showPage()
+        page_num += 1
+        text(margin, height - 54, f"Invoice {invoice.invoice_number} (summary)", 11, True)
+        y = height - 102
+    subtotal = invoice.subtotal_amount
+    p.setStrokeColor(colors.HexColor("#d7e4e8"))
+    p.line(330, y - 6, width - margin, y - 6)
+    text(335, y - 26, "Subtotal", color=muted)
+    p.setFillColor(ink)
+    p.setFont("Helvetica", 10)
+    p.drawRightString(width - margin - 2, y - 26, f"${subtotal:,.2f}")
+    text(335, y - 47, "Discount", color=muted)
+    p.drawRightString(width - margin - 2, y - 47, f"-${invoice.discount:,.2f}")
+    p.setFillColor(accent)
+    p.setFont("Helvetica-Bold", 13)
+    p.drawString(335, y - 75, "TOTAL")
+    p.drawRightString(width - margin - 2, y - 75, f"${invoice.total:,.2f}")
+    page_footer()
     p.save()
-
     return response
 
 
