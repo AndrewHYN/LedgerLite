@@ -14,8 +14,8 @@ jobs:
       DEBUG: "true"
       SECRET_KEY: "ci-only-not-a-production-secret"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
           cache: pip
@@ -25,5 +25,15 @@ jobs:
         run: python -m compileall -q invoicepro invoices accounts
       - name: Django configuration
         run: python manage.py check
+      - name: Optional Cloudinary settings load
+        env:
+          CLOUDINARY_CLOUD_NAME: placeholder
+          CLOUDINARY_API_KEY: placeholder
+          CLOUDINARY_API_SECRET: placeholder
+        run: python manage.py check
+      - name: Collect static files
+        run: python manage.py collectstatic --noinput
+      - name: Model migration drift
+        run: python manage.py makemigrations --check --dry-run
       - name: Regression tests
         run: python manage.py test invoices -v 2
