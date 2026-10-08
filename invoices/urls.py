@@ -22,6 +22,7 @@ urlpatterns = [
     path('create/', views.create_invoice, name='create_invoice'),
 
     path("invoices/", views.all_invoices, name="all_invoices"),
+    path("invoices/export.csv", views.export_invoices_csv, name="export_invoices_csv"),
 
     path('invoice/<int:invoice_id>/', views.invoice_detail, name='invoice_detail'),
     path('invoice/<int:invoice_id>/edit/', views.edit_invoice, name='edit_invoice'),
@@ -70,5 +71,4 @@ urlpatterns = [
     path('terms/', views.terms, name='terms'),
     path('privacy/', views.privacy, name='privacy'),
     path('support/',views.support, name='support'),
-    path("db-check/", views.db_check),
 ]
