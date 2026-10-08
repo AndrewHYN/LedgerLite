@@ -1,6 +1,12 @@
 from decimal import Decimal, InvalidOperation
 import csv
 import uuid
+from io import BytesIO
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import ImageReader, simpleSplit
+from django.utils.text import slugify
 
 from django.core.exceptions import ValidationError
 from django.contrib.auth.password_validation import validate_password
@@ -183,8 +189,9 @@ def create_invoice(request):
             if not requested:
                 raise ValueError("Select at least one product.")
             discount = Decimal(request.POST.get("discount", "0") or "0")
-            if not discount.is_finite() or discount < 0:
-                raise ValueError("Discount cannot be negative.")
+            if (not discount.is_finite() or discount < 0 or discount > Decimal("99999999.99")
+                    or discount.as_tuple().exponent < -2):
+                raise ValueError("Enter a non-negative discount with at most two decimal places.")
             with transaction.atomic():
                 locked = list(
                     Product.objects.select_for_update()
@@ -197,6 +204,8 @@ def create_invoice(request):
                     (product.price * requested[product.pk] for product in locked),
                     Decimal("0.00"),
                 )
+                if subtotal > Decimal("99999999.99"):
+                    raise ValueError("Invoice subtotal is too large.")
                 if discount > subtotal:
                     raise ValueError("Discount cannot exceed the invoice subtotal.")
                 for product in locked:
@@ -251,8 +260,9 @@ def edit_invoice(request, invoice_id):
             if not (len(ids) == len(descs) == len(quantities) == len(prices)):
                 raise ValueError("All invoice lines are required.")
             discount = Decimal(request.POST.get("discount") or "0")
-            if not discount.is_finite() or discount < 0:
-                raise ValueError("Enter a non-negative discount.")
+            if (not discount.is_finite() or discount < 0 or discount > Decimal("99999999.99")
+                or discount.as_tuple().exponent < -2):
+                raise ValueError("Enter a non-negative discount with at most two decimal places.")
             with transaction.atomic():
                 invoice = get_object_or_404(
                     Invoice.objects.select_for_update(), pk=invoice_id, owner=request.user
@@ -295,6 +305,8 @@ def edit_invoice(request, invoice_id):
                             raise ValueError("Cannot use more stock from an archived product.")
                         stock_deltas[product.pk] = stock_deltas.get(product.pk, 0) + delta
                     new_values.append((item, description, quantity, price))
+                if subtotal > Decimal("99999999.99"):
+                    raise ValueError("Invoice subtotal is too large.")
                 if discount > subtotal:
                     raise ValueError("Discount cannot exceed the subtotal.")
                 for product_id, delta in stock_deltas.items():
