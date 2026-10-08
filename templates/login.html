@@ -255,6 +255,8 @@ a:hover{
             Sign in to continue managing your business.
         </p>
 
+        {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+        {% if messages %}{% for message in messages %}<div class="alert alert-info" role="status">{{ message }}</div>{% endfor %}{% endif %}
         <form method="POST">
             {% csrf_token %}
 
