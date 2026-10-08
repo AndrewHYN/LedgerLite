@@ -9,8 +9,6 @@ urlpatterns = [
     path('accounts/', include('accounts.urls')),
 ]
 
-# Serve media files in both development and production
-urlpatterns += static(
-    settings.MEDIA_URL,
-    document_root=settings.MEDIA_ROOT
-)
+# Local media serving is development-only; production media uses persistent storage.
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
