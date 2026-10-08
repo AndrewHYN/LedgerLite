@@ -290,6 +290,7 @@ a:hover{
         {% endfor %}
     {% endif %}
 
+    <p class="text-muted">Choose a password with at least 8 characters that is not commonly used.</p>
     <form method="POST">
         {% csrf_token %}
 
@@ -314,6 +315,8 @@ a:hover{
             <label class="form-label">Password</label>
             <input type="password"
                    name="password"
+                   minlength="8"
+                   autocomplete="new-password"
                    class="form-control"
                    placeholder="Create a password"
                    required>

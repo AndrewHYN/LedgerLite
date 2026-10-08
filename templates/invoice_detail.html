@@ -350,6 +350,11 @@ body {
 
     </div>
 
+    <div class="summary" aria-label="Inventory edit guidance">
+        <h6>Invoice corrections</h6>
+        <p class="text-muted mb-0">Changing a quantity adjusts product stock only when the original product can be identified. Deleting a completed invoice does not automatically return stock.</p>
+    </div>
+
     <!-- SHARE -->
     <div class="share-box">
 
@@ -361,13 +366,13 @@ body {
 
             <a class="saas-btn saas-btn-success"
                href="{% url 'public_invoice' invoice.share_token %}"
-               target="_blank">
+               target="_blank" rel="noopener noreferrer">
                 Open
             </a>
 
             <input class="share-input"
                    readonly
-                   value="{{ request.scheme }}://{{ request.get_host }}{% url 'public_invoice' invoice.share_token %}}">
+                   value="{{ request.scheme }}://{{ request.get_host }}{% url 'public_invoice' invoice.share_token %}">
 
         </div>
 

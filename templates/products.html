@@ -197,12 +197,14 @@ small {
 
     <div class="col-md-4">
         <div class="inventory-stat">
-            <small>Status</small>
-            <h3 class="mb-0 text-success">Active</h3>
+            <small>Out of stock</small>
+            <h3 class="mb-0 text-danger">{{ out_of_stock_count }}</h3>
         </div>
     </div>
 
 </div>
+
+<p class="text-muted">Retail value of stock on hand: <strong class="text-light">${{ inventory_retail_value|floatformat:2 }}</strong>. This is not purchase cost or realized revenue.</p>
 
 <!-- PRODUCTS -->
 <div class="row g-4">
@@ -222,7 +224,7 @@ small {
 
             {% if product.stock == 0 %}
                 <span class="badge-out">Out</span>
-            {% elif product.stock < 10 %}
+            {% elif product.stock <= 5 %}
                 <span class="badge-low">Low</span>
             {% else %}
                 <span class="badge-ok">OK</span>
@@ -246,8 +248,8 @@ small {
 
             <!-- ✅ FIXED LOGIC: REAL VALUE -->
             <div class="d-flex justify-content-between">
-                <small>Total Value</small>
-                <strong>${{ product.price|default:0|floatformat:2|add:0 }}</strong>
+                <small>Retail stock value</small>
+                <strong>${{ product.inventory_value|floatformat:2 }}</strong>
             </div>
 
         </div>
@@ -263,7 +265,7 @@ small {
                 <input type="number"
                        name="quantity"
                        class="form-control"
-                       placeholder="Qty">
+                       placeholder="Qty" min="1" step="1" required>
 
                 <button class="btn btn-restock">
                     Restock

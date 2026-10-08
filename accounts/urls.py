@@ -1,7 +1,5 @@
 from django.urls import path
-from . import views
+from invoices import views
 
-urlpatterns = [
-    # AUTH
-    path("register/", views.register, name="register"),
-]
+# Legacy /accounts/register/ shares the validated registration flow.
+urlpatterns = [path("register/", views.register, name="accounts_register")]

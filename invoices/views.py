@@ -1,4 +1,17 @@
 from decimal import Decimal, InvalidOperation
+import csv
+import uuid
+from io import BytesIO
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import ImageReader, simpleSplit
+from django.utils.text import slugify
+
+from django.core.exceptions import ValidationError
+from django.contrib.auth.password_validation import validate_password
+from django.db import transaction
+from django.db.models import F
 
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
@@ -37,36 +50,36 @@ def home(request):
 # REGISTER
 # ======================
 def register(request):
-
     if request.user.is_authenticated:
         return redirect("dashboard")
-
     if request.method == "POST":
-
         username = request.POST.get("username", "").strip()
         email = request.POST.get("email", "").strip()
-        password = request.POST.get("password", "").strip()
-
-        if not username or not password:
-            messages.error(request, "Username and password required.")
+        password = request.POST.get("password", "")
+        if not username or len(username) > 150:
+            messages.error(request, "Enter a username under 150 characters.")
             return redirect("register")
-
-        if User.objects.filter(username=username).exists():
+        if User.objects.filter(username__iexact=username).exists():
             messages.error(request, "Username already exists.")
             return redirect("register")
-
-        user = User.objects.create_user(
-            username=username,
-            email=email,
-            password=password
-        )
-
-        CompanyProfile.objects.get_or_create(user=user)
-
+        if email and User.objects.filter(email__iexact=email).exists():
+            messages.error(request, "That email address is already registered.")
+            return redirect("register")
+        try:
+            validate_password(password, user=User(username=username, email=email))
+        except ValidationError as exc:
+            for message in exc.messages:
+                messages.error(request, message)
+            return redirect("register")
+        with transaction.atomic():
+            user = User.objects.create_user(username=username, email=email, password=password)
+            CompanyProfile.objects.get_or_create(user=user)
         login(request, user)
         return redirect("dashboard")
-
     return render(request, "register.html")
+
+
+# ======================
 
 
 # ======================
@@ -112,17 +125,17 @@ def products(request):
         is_deleted=False
     ).order_by("name")
 
-    low_stock_products = products.filter(stock__lte=5)
-
-    print("LOW STOCK PRODUCTS:")
-    for p in low_stock_products:
-        print(p.name, p.stock)
+    low_stock_products = products.filter(stock__gt=0, stock__lte=5)
 
     low_stock_count = low_stock_products.count()
+    out_of_stock_count = products.filter(stock__lte=0).count()
+    inventory_retail_value = sum((p.inventory_value for p in products), Decimal("0.00"))
 
     return render(request, "products.html", {
         "products": products,
         "low_stock_count": low_stock_count,
+        "out_of_stock_count": out_of_stock_count,
+        "inventory_retail_value": inventory_retail_value,
     })
 
 
@@ -131,31 +144,28 @@ def products(request):
 # ======================
 @login_required
 def add_product(request):
-
     if request.method == "POST":
-
         name = request.POST.get("name", "").strip()
-
         try:
-            price = Decimal(request.POST.get("price", "0"))
-        except InvalidOperation:
-            price = Decimal("0.00")
-
-        try:
-            stock = int(request.POST.get("stock", 0))
-        except ValueError:
-            stock = 0
-
-        Product.objects.create(
-            owner=request.user,
-            name=name,
-            price=price,
-            stock=stock
-        )
-
+            price = Decimal(request.POST.get("price", "0") or "0")
+            stock = int(request.POST.get("stock", "0") or "0")
+            if (
+                not name or len(name) > 255 or not price.is_finite()
+                or price < 0 or price > Decimal("99999999.99")
+                or price.as_tuple().exponent < -2
+                or stock < 0 or stock > 100000000
+            ):
+                raise ValueError
+        except (ValueError, InvalidOperation):
+            messages.error(request, "Enter a valid name, non-negative price and stock quantity.")
+            return redirect("add_product")
+        Product.objects.create(owner=request.user, name=name, price=price, stock=stock)
+        messages.success(request, "Product added.")
         return redirect("products")
-
     return render(request, "add_product.html")
+
+
+# ======================
 
 
 # ======================
@@ -163,78 +173,79 @@ def add_product(request):
 # ======================
 @login_required
 def create_invoice(request):
-
     run_stock_check(request.user)
-
-    products = Product.objects.filter(owner=request.user, is_deleted=False)
-
+    products = Product.objects.filter(owner=request.user, is_deleted=False).order_by("name")
     if request.method == "POST":
-
         product_ids = request.POST.getlist("product_id[]")
         quantities = request.POST.getlist("quantity[]")
-
-        if not product_ids:
-            messages.error(request, "Add at least one product.")
-            return redirect("create_invoice")
-
         try:
-            discount = Decimal(request.POST.get("discount", "0"))
-        except InvalidOperation:
-            discount = Decimal("0.00")
-
-        invoice = Invoice.objects.create(
-            owner=request.user,
-            invoice_number="TEMP",
-            customer_name=request.POST.get("customer_name", "").strip(),
-            customer_phone=request.POST.get("customer_phone", "").strip(),
-            discount=discount
-        )
-
-        created = 0
-
-        for pid, qty in zip(product_ids, quantities):
-
-            try:
-                product = Product.objects.get(id=pid, owner=request.user)
-                qty = int(qty)
-
-                if qty <= 0:
+            if not product_ids or len(product_ids) != len(quantities):
+                raise ValueError("Add at least one complete invoice item.")
+            requested = {}
+            for raw_id, raw_qty in zip(product_ids, quantities):
+                if not raw_id:  # Ignore an unused blank line in the form.
                     continue
-
-                if product.stock < qty:
-                    messages.warning(request, f"Not enough stock for {product.name}")
-                    continue
-
-                InvoiceItem.objects.create(
-                    invoice=invoice,
-                    description=product.name,
-                    quantity=qty,
-                    price=product.price
+                product_id = int(raw_id)
+                quantity = int(raw_qty)
+                if product_id <= 0 or quantity <= 0 or quantity > 100000000:
+                    raise ValueError("Item quantities must be positive.")
+                requested[product_id] = requested.get(product_id, 0) + quantity
+            if not requested:
+                raise ValueError("Select at least one product.")
+            discount = Decimal(request.POST.get("discount", "0") or "0")
+            if (not discount.is_finite() or discount < 0 or discount > Decimal("99999999.99")
+                    or discount.as_tuple().exponent < -2):
+                raise ValueError("Enter a non-negative discount with at most two decimal places.")
+            with transaction.atomic():
+                locked = list(
+                    Product.objects.select_for_update()
+                    .filter(owner=request.user, is_deleted=False, pk__in=requested)
+                    .order_by("pk")
                 )
-
-                product.stock -= qty
-                product.save()
-
-                created += 1
-
-            except Exception:
-                continue
-
-        if created == 0:
-            invoice.delete()
-            messages.error(request, "Invoice cannot be empty.")
+                if len(locked) != len(requested):
+                    raise ValueError("One or more selected products are unavailable.")
+                subtotal = sum(
+                    (product.price * requested[product.pk] for product in locked),
+                    Decimal("0.00"),
+                )
+                if subtotal > Decimal("99999999.99"):
+                    raise ValueError("Invoice subtotal is too large.")
+                if discount > subtotal:
+                    raise ValueError("Discount cannot exceed the invoice subtotal.")
+                for product in locked:
+                    quantity = requested[product.pk]
+                    updated = Product.objects.filter(
+                        pk=product.pk, owner=request.user, is_deleted=False,
+                        stock__gte=quantity,
+                    ).update(stock=F("stock") - quantity)
+                    if not updated:
+                        raise ValueError(f"Not enough stock for {product.name}.")
+                invoice = Invoice.objects.create(
+                    owner=request.user,
+                    invoice_number=f"TMP-{uuid.uuid4().hex}",
+                    customer_name=request.POST.get("customer_name", "").strip()[:255],
+                    customer_phone=request.POST.get("customer_phone", "").strip()[:50],
+                    discount=discount,
+                )
+                InvoiceItem.objects.bulk_create([
+                    InvoiceItem(
+                        invoice=invoice, description=product.name,
+                        quantity=requested[product.pk], price=product.price,
+                    )
+                    for product in locked
+                ])
+                invoice.update_total()
+                invoice.invoice_number = f"INV-{invoice.pk:05d}"
+                invoice.save(update_fields=["invoice_number"])
+        except (InvalidOperation, ValueError, OverflowError) as exc:
+            messages.error(request, str(exc) or "Check the invoice quantities and discount.")
             return redirect("create_invoice")
+        messages.success(request, f"Invoice {invoice.invoice_number} created.")
+        return redirect("invoice_detail", invoice.pk)
+    return render(request, "create_invoice.html", {"products": products})
 
-        invoice.update_total()
-        invoice.invoice_number = f"INV-{invoice.id:05d}"
-        invoice.save()
 
-        messages.success(request, "Invoice created successfully.")
-        return redirect("dashboard")
-
-    return render(request, "create_invoice.html", {
-        "products": products
-    })
+# ======================
 
 
 # ======================
@@ -242,42 +253,93 @@ def create_invoice(request):
 # ======================
 @login_required
 def edit_invoice(request, invoice_id):
-
-    run_stock_check(request.user)
-
-    invoice = get_object_or_404(Invoice, id=invoice_id, owner=request.user)
-
+    """Adjust line quantities only when original inventory can be reconciled."""
+    invoice = get_object_or_404(Invoice, pk=invoice_id, owner=request.user)
     if request.method == "POST":
-
-        invoice.customer_name = request.POST.get("customer_name", "").strip()
-        invoice.customer_phone = request.POST.get("customer_phone", "").strip()
-
         try:
-            invoice.discount = Decimal(request.POST.get("discount", "0"))
-        except InvalidOperation:
-            invoice.discount = Decimal("0.00")
-
-        invoice.save()
-
-        item_ids = request.POST.getlist("item_id[]")
-        descriptions = request.POST.getlist("description[]")
-        quantities = request.POST.getlist("quantity[]")
-        prices = request.POST.getlist("price[]")
-
-        for item_id, desc, qty, price in zip(item_ids, descriptions, quantities, prices):
-            try:
-                item = InvoiceItem.objects.get(id=item_id, invoice=invoice)
-                item.description = desc.strip()
-                item.quantity = int(qty or 0)
-                item.price = Decimal(price or "0")
-                item.save()
-            except:
-                continue
-
-        invoice.update_total()
-
+            ids = request.POST.getlist("item_id[]")
+            descs = request.POST.getlist("description[]")
+            quantities = request.POST.getlist("quantity[]")
+            prices = request.POST.getlist("price[]")
+            if not (len(ids) == len(descs) == len(quantities) == len(prices)):
+                raise ValueError("All invoice lines are required.")
+            discount = Decimal(request.POST.get("discount") or "0")
+            if (not discount.is_finite() or discount < 0 or discount > Decimal("99999999.99")
+                or discount.as_tuple().exponent < -2):
+                raise ValueError("Enter a non-negative discount with at most two decimal places.")
+            with transaction.atomic():
+                invoice = get_object_or_404(
+                    Invoice.objects.select_for_update(), pk=invoice_id, owner=request.user
+                )
+                existing = list(invoice.items.select_for_update().order_by("pk"))
+                by_id = {str(item.pk): item for item in existing}
+                if len(ids) != len(existing) or set(ids) != set(by_id):
+                    raise ValueError("Invoice lines have changed. Refresh and try again.")
+                new_values = []
+                stock_deltas = {}
+                subtotal = Decimal("0.00")
+                for raw_id, description, raw_qty, raw_price in zip(ids, descs, quantities, prices):
+                    item = by_id[raw_id]
+                    quantity = int(raw_qty)
+                    price = Decimal(raw_price)
+                    description = description.strip()
+                    if (
+                        not description or len(description) > 255
+                        or quantity <= 0 or quantity > 100000000
+                        or not price.is_finite() or price < 0
+                        or price > Decimal("99999999.99")
+                        or price.as_tuple().exponent < -2
+                    ):
+                        raise ValueError("Invoice lines need a description, positive quantity and valid price.")
+                    subtotal += quantity * price
+                    delta = quantity - item.quantity
+                    if delta:
+                        matches = list(
+                            Product.objects.select_for_update()
+                            .filter(owner=request.user, name=item.description)
+                            .order_by("pk")[:2]
+                        )
+                        if len(matches) != 1:
+                            raise ValueError(
+                                "Cannot adjust quantity: the original product is missing or duplicated. "
+                                "Keep the existing quantity, or correct stock manually."
+                            )
+                        product = matches[0]
+                        if delta > 0 and product.is_deleted:
+                            raise ValueError("Cannot use more stock from an archived product.")
+                        stock_deltas[product.pk] = stock_deltas.get(product.pk, 0) + delta
+                    new_values.append((item, description, quantity, price))
+                if subtotal > Decimal("99999999.99"):
+                    raise ValueError("Invoice subtotal is too large.")
+                if discount > subtotal:
+                    raise ValueError("Discount cannot exceed the subtotal.")
+                for product_id, delta in stock_deltas.items():
+                    if delta > 0:
+                        count = Product.objects.filter(
+                            pk=product_id, owner=request.user, is_deleted=False,
+                            stock__gte=delta,
+                        ).update(stock=F("stock") - delta)
+                        if not count:
+                            raise ValueError("Insufficient stock for the updated invoice.")
+                    elif delta < 0:
+                        Product.objects.filter(pk=product_id, owner=request.user).update(
+                            stock=F("stock") + (-delta)
+                        )
+                for item, description, quantity, price in new_values:
+                    item.description = description
+                    item.quantity = quantity
+                    item.price = price
+                    item.save(update_fields=["description", "quantity", "price"])
+                invoice.customer_name = request.POST.get("customer_name", "").strip()[:255]
+                invoice.customer_phone = request.POST.get("customer_phone", "").strip()[:50]
+                invoice.discount = discount
+                invoice.save(update_fields=["customer_name", "customer_phone", "discount"])
+                invoice.update_total()
+        except (InvalidOperation, ValueError, OverflowError) as exc:
+            messages.error(request, str(exc) or "Please correct the invoice details.")
+            return redirect("edit_invoice", invoice_id=invoice_id)
+        messages.success(request, "Invoice changes saved and stock reconciled.")
         return redirect("invoice_detail", invoice.id)
-
     return render(request, "edit_invoice.html", {"invoice": invoice})
 
 
@@ -310,105 +372,129 @@ def delete_invoice(request, invoice_id):
 # ======================
 @login_required
 def invoice_pdf(request, invoice_id):
-
-    invoice = get_object_or_404(Invoice, id=invoice_id, owner=request.user)
-
+    """Render a printable, multi-page invoice for its owner."""
+    invoice = get_object_or_404(
+        Invoice.objects.prefetch_related("items"),
+        pk=invoice_id, owner=request.user,
+    )
     profile = CompanyProfile.objects.filter(user=request.user).first()
-
     response = HttpResponse(content_type="application/pdf")
-    response["Content-Disposition"] = f'attachment; filename="invoice_{invoice.invoice_number}.pdf"'
+    filename = slugify(invoice.invoice_number) or f"invoice-{invoice.pk}"
+    response["Content-Disposition"] = f'attachment; filename="{filename}.pdf"'
+    response["Cache-Control"] = "private, no-store"
 
-    p = canvas.Canvas(response)
+    p = canvas.Canvas(response, pagesize=A4)
+    width, height = A4
+    ink = colors.HexColor("#12283c")
+    muted = colors.HexColor("#61758a")
+    accent = colors.HexColor("#087e80")
+    light = colors.HexColor("#edf4f5")
+    margin = 44
+    p.setTitle(f"Invoice {invoice.invoice_number}")
+    page_num = 1
 
-    width, height = 595, 842
-    y = height - 50
+    def text(x, y, value, size=10, bold=False, color=ink):
+        p.setFillColor(color)
+        p.setFont("Helvetica-Bold" if bold else "Helvetica", size)
+        p.drawString(x, y, str(value or ""))
 
-    header_height = 90
+    def page_footer():
+        p.setStrokeColor(colors.HexColor("#d7e4e8"))
+        p.line(margin, 46, width - margin, 46)
+        text(margin, 30, "Generated with LedgerLite", 8, color=muted)
+        p.setFont("Helvetica", 8)
+        p.setFillColor(muted)
+        p.drawRightString(width - margin, 30, f"Page {page_num}")
 
-    p.setStrokeColorRGB(0.1, 0.1, 0.1)
-    p.setLineWidth(1)
-    p.rect(30, y - header_height, width - 60, header_height, stroke=1, fill=0)
+    def table_heading(y):
+        p.setFillColor(ink)
+        p.roundRect(margin, y - 16, width - 2 * margin, 30, 5, fill=1, stroke=0)
+        text(margin + 10, y - 4, "DESCRIPTION", 9, True, colors.white)
+        text(330, y - 4, "QTY", 9, True, colors.white)
+        text(386, y - 4, "PRICE", 9, True, colors.white)
+        text(475, y - 4, "AMOUNT", 9, True, colors.white)
+        return y - 32
 
-    logo_x = 40
-    logo_y = y - 70
-
+    p.setFillColor(light)
+    p.roundRect(margin, height - 160, width - 2 * margin, 120, 12, stroke=0, fill=1)
     if profile and profile.company_logo:
         try:
-            p.drawImage(
-                profile.company_logo.path,
-                logo_x,
-                logo_y,
-                width=60,
-                height=60,
-                preserveAspectRatio=True,
-                mask='auto'
-            )
-        except:
-            p.setFont("Helvetica-Bold", 10)
-            p.drawString(logo_x, logo_y + 20, "LOGO")
+            profile.company_logo.open("rb")
+            logo_bytes = profile.company_logo.read()
+            if len(logo_bytes) <= 4 * 1024 * 1024:
+                p.drawImage(
+                    ImageReader(BytesIO(logo_bytes)),
+                    margin + 12, height - 138, width=62, height=62,
+                    preserveAspectRatio=True, anchor="c", mask="auto",
+                )
+        except Exception:
+            pass  # A missing or inaccessible remote logo must not prevent invoice export.
+        finally:
+            try:
+                profile.company_logo.close()
+            except Exception:
+                pass
 
-    text_x = 120
-    text_y = y - 35
-
-    company_name = profile.company_name if profile else "LedgerLite Business"
-
-    p.setFont("Helvetica-Bold", 14)
-    p.drawString(text_x, text_y, company_name)
-
-    p.setFont("Helvetica", 9)
-
+    company_name = (
+        profile.company_name if profile and profile.company_name else "LedgerLite Business"
+    )
+    for i, part in enumerate(simpleSplit(company_name, "Helvetica-Bold", 13, 235)[:2]):
+        text(126, height - 76 - 16 * i, part, 13, True)
     if profile:
-        p.drawString(text_x, text_y - 15, f"Email: {profile.company_email or '-'}")
-        p.drawString(text_x, text_y - 27, f"Phone: {profile.company_phone or '-'}")
-
+        text(126, height - 116, (profile.company_email or "")[:39], 9, color=muted)
+        text(126, height - 130, (profile.company_phone or "")[:39], 9, color=muted)
+    p.setFillColor(accent)
     p.setFont("Helvetica-Bold", 22)
-    p.drawRightString(width - 50, y - 40, "INVOICE")
+    p.drawRightString(width - margin - 13, height - 78, "INVOICE")
 
-    y -= 120
-
-    p.setFont("Helvetica-Bold", 11)
-    p.drawString(40, y, "Bill To:")
-
-    y -= 15
-    p.setFont("Helvetica", 10)
-    p.drawString(40, y, f"{invoice.customer_name}")
-
-    y -= 15
-    p.drawString(40, y, f"Phone: {invoice.customer_phone}")
-
-    y -= 25
-
-    p.line(40, y, width - 40, y)
-    y -= 25
-
-    p.setFont("Helvetica-Bold", 11)
-    p.drawString(40, y, "Item")
-    p.drawString(300, y, "Qty")
-    p.drawString(370, y, "Price")
-    p.drawString(460, y, "Total")
-
-    y -= 20
-
-    subtotal = Decimal("0.00")
+    y = height - 191
+    text(margin, y, "BILL TO", 9, True, accent)
+    text(margin, y - 20, invoice.customer_name or "Customer", 11, True)
+    text(margin, y - 36, invoice.customer_phone, 9, color=muted)
+    text(360, y, "INVOICE NUMBER", 9, True, accent)
+    text(360, y - 20, invoice.invoice_number, 10, True)
+    text(360, y - 36, timezone.localtime(invoice.date_created).strftime("%d %b %Y"), 9, color=muted)
+    y = table_heading(y - 70)
 
     for item in invoice.items.all():
+        parts = simpleSplit(item.description or "-", "Helvetica", 10, 265) or ["-"]
+        row_height = max(34, len(parts) * 14 + 12)
+        if y - row_height < 114:
+            page_footer()
+            p.showPage()
+            page_num += 1
+            text(margin, height - 54, f"Invoice {invoice.invoice_number} (continued)", 11, True)
+            y = table_heading(height - 90)
+        p.setStrokeColor(colors.HexColor("#e1e9ef"))
+        p.line(margin, y - row_height + 6, width - margin, y - row_height + 6)
+        for index, line in enumerate(parts):
+            text(margin + 10, y - 13 - 14 * index, line)
+        text(330, y - 13, item.quantity)
+        text(386, y - 13, f"${item.price:,.2f}")
+        text(475, y - 13, f"${item.subtotal:,.2f}", bold=True)
+        y -= row_height
 
-        line_total = item.quantity * item.price
-        subtotal += line_total
-
-        p.drawString(40, y, str(item.description))
-        p.drawString(300, y, str(item.quantity))
-        p.drawString(370, y, f"${item.price}")
-        p.drawString(460, y, f"${line_total}")
-
-        y -= 18
-
-    p.setFont("Helvetica-Bold", 11)
-    p.drawString(320, y - 20, "TOTAL:")
-    p.drawString(460, y - 20, f"${invoice.total}")
-
+    if y < 160:
+        page_footer()
+        p.showPage()
+        page_num += 1
+        text(margin, height - 54, f"Invoice {invoice.invoice_number} (summary)", 11, True)
+        y = height - 102
+    subtotal = invoice.subtotal_amount
+    p.setStrokeColor(colors.HexColor("#d7e4e8"))
+    p.line(330, y - 6, width - margin, y - 6)
+    text(335, y - 26, "Subtotal", color=muted)
+    p.setFillColor(ink)
+    p.setFont("Helvetica", 10)
+    p.drawRightString(width - margin - 2, y - 26, f"${subtotal:,.2f}")
+    text(335, y - 47, "Discount", color=muted)
+    p.drawRightString(width - margin - 2, y - 47, f"-${invoice.discount:,.2f}")
+    p.setFillColor(accent)
+    p.setFont("Helvetica-Bold", 13)
+    p.drawString(335, y - 75, "TOTAL")
+    p.drawRightString(width - margin - 2, y - 75, f"${invoice.total:,.2f}")
+    page_footer()
     p.save()
-
     return response
 
 
@@ -417,23 +503,25 @@ def invoice_pdf(request, invoice_id):
 # ======================
 @login_required
 def profile(request):
-
     profile_obj, _ = CompanyProfile.objects.get_or_create(user=request.user)
-
     if request.method == "POST":
-
         profile_obj.company_name = request.POST.get("company_name", "").strip()
         profile_obj.company_phone = request.POST.get("company_phone", "").strip()
         profile_obj.company_email = request.POST.get("company_email", "").strip()
         profile_obj.company_address = request.POST.get("company_address", "").strip()
-
-        if request.FILES.get("company_logo"):
-            profile_obj.company_logo = request.FILES["company_logo"]
-
+        logo = request.FILES.get("company_logo")
+        if logo:
+            if logo.size > 2 * 1024 * 1024:
+                messages.error(request, "Logo must be smaller than 2 MB.")
+                return redirect("profile")
+            profile_obj.company_logo = logo
         profile_obj.save()
+        messages.success(request, "Business profile saved.")
         return redirect("profile")
-
     return render(request, "profile.html", {"profile": profile_obj})
+
+
+# ======================
 
 
 # ======================
@@ -441,29 +529,31 @@ def profile(request):
 # ======================
 @login_required
 def restock(request):
-
     products = Product.objects.filter(owner=request.user, is_deleted=False)
-
     if request.method == "POST":
-
-        product_id = request.POST.get("product_id")
-        qty = int(request.POST.get("quantity") or 0)
-
-        product = get_object_or_404(Product, id=product_id, owner=request.user)
-
-        if qty > 0:
-            product.stock += qty
-            product.save()
-
-            Notification.objects.filter(
-                user=request.user,
-                type="stock",
-                message__icontains=product.name
-            ).delete()
-
+        try:
+            quantity = int(request.POST.get("quantity") or "0")
+            if quantity <= 0 or quantity > 100000000:
+                raise ValueError
+        except ValueError:
+            messages.error(request, "Restock quantity must be a positive whole number.")
+            return redirect("restock")
+        product = get_object_or_404(
+            Product, pk=request.POST.get("product_id"),
+            owner=request.user, is_deleted=False,
+        )
+        Product.objects.filter(pk=product.pk, owner=request.user).update(
+            stock=F("stock") + quantity
+        )
+        Notification.objects.filter(
+            user=request.user, type="stock", product_id=product.pk
+        ).delete()
+        messages.success(request, f"Restocked {product.name} by {quantity}.")
         return redirect("products")
-
     return render(request, "restock.html", {"products": products})
+
+
+# ======================
 
 
 # ======================
@@ -493,7 +583,7 @@ def analytics(request):
 
     product_count = products.count()
 
-    low_stock_count = products.filter(stock__lte=5).count()
+    low_stock_count = products.filter(stock__gt=0, stock__lte=5).count()
     out_of_stock_count = products.filter(stock=0).count()
 
     top_products = (
@@ -741,6 +831,30 @@ def all_invoices(request):
 
 
 @login_required
+def export_invoices_csv(request):
+    """Download this account's invoices only; no shared or cross-tenant rows."""
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = 'attachment; filename="ledgerlite-invoices.csv"'
+    response["Cache-Control"] = "no-store"
+    writer = csv.writer(response)
+    writer.writerow(["Invoice", "Customer", "Phone", "Created", "Subtotal", "Discount", "Total"])
+    for invoice in (
+        Invoice.objects.filter(owner=request.user)
+        .prefetch_related("items").order_by("-date_created")
+    ):
+        # Prevent spreadsheet formula injection in user-provided fields.
+        def safe_cell(value):
+            text = str(value or "")
+            return "'" + text if text.lstrip().startswith(("=", "+", "-", "@")) else text
+        writer.writerow([
+            invoice.invoice_number, safe_cell(invoice.customer_name),
+            safe_cell(invoice.customer_phone), invoice.date_created.isoformat(),
+            invoice.subtotal_amount, invoice.discount, invoice.total,
+        ])
+    return response
+
+
+@login_required
 def dashboard(request):
 
     run_stock_check(request.user)
@@ -768,7 +882,7 @@ def dashboard(request):
 
     # ✅ ADD THIS (CRITICAL FIX)
     products = Product.objects.filter(owner=request.user, is_deleted=False)
-    low_stock_count = products.filter(stock__lte=5).count()
+    low_stock_count = products.filter(stock__gt=0, stock__lte=5).count()
 
     return render(request, "dashboard.html", {
         "invoices": invoices[:5],
@@ -783,12 +897,10 @@ def dashboard(request):
     })
 
 
-@login_required
 def terms(request):
     return render(request, 'terms.html')
 
 
-@login_required
 def privacy(request):
     return render(request, 'privacy.html')
 
@@ -828,8 +940,3 @@ def support(request):
 
 
 
-def db_check(request):
-    return HttpResponse(
-        f"Engine: {connection.settings_dict['ENGINE']}<br>"
-        f"Database: {connection.settings_dict['NAME']}"
-    )
