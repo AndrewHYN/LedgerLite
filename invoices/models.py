@@ -4,6 +4,7 @@ import uuid
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.urls import reverse
 from django.db import models
 from django.contrib.auth.models import User
 
@@ -46,7 +47,12 @@ class Product(models.Model):
         return self.name
 
     def get_absolute_url(self):
-        return reverse("product_detail", args=[self.id])
+        return reverse("products")
+
+    @property
+    def inventory_value(self):
+        """Retail value of on-hand stock; not its accounting cost basis."""
+        return self.price * max(self.stock, 0)
 
 
 # ======================
