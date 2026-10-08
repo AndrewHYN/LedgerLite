@@ -1,4 +1,11 @@
 from decimal import Decimal, InvalidOperation
+import csv
+import uuid
+
+from django.core.exceptions import ValidationError
+from django.contrib.auth.password_validation import validate_password
+from django.db import transaction
+from django.db.models import F
 
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
@@ -37,36 +44,36 @@ def home(request):
 # REGISTER
 # ======================
 def register(request):
-
     if request.user.is_authenticated:
         return redirect("dashboard")
-
     if request.method == "POST":
-
         username = request.POST.get("username", "").strip()
         email = request.POST.get("email", "").strip()
-        password = request.POST.get("password", "").strip()
-
-        if not username or not password:
-            messages.error(request, "Username and password required.")
+        password = request.POST.get("password", "")
+        if not username or len(username) > 150:
+            messages.error(request, "Enter a username under 150 characters.")
             return redirect("register")
-
-        if User.objects.filter(username=username).exists():
+        if User.objects.filter(username__iexact=username).exists():
             messages.error(request, "Username already exists.")
             return redirect("register")
-
-        user = User.objects.create_user(
-            username=username,
-            email=email,
-            password=password
-        )
-
-        CompanyProfile.objects.get_or_create(user=user)
-
+        if email and User.objects.filter(email__iexact=email).exists():
+            messages.error(request, "That email address is already registered.")
+            return redirect("register")
+        try:
+            validate_password(password, user=User(username=username, email=email))
+        except ValidationError as exc:
+            for message in exc.messages:
+                messages.error(request, message)
+            return redirect("register")
+        with transaction.atomic():
+            user = User.objects.create_user(username=username, email=email, password=password)
+            CompanyProfile.objects.get_or_create(user=user)
         login(request, user)
         return redirect("dashboard")
-
     return render(request, "register.html")
+
+
+# ======================
 
 
 # ======================
@@ -114,10 +121,6 @@ def products(request):
 
     low_stock_products = products.filter(stock__lte=5)
 
-    print("LOW STOCK PRODUCTS:")
-    for p in low_stock_products:
-        print(p.name, p.stock)
-
     low_stock_count = low_stock_products.count()
 
     return render(request, "products.html", {
@@ -131,31 +134,28 @@ def products(request):
 # ======================
 @login_required
 def add_product(request):
-
     if request.method == "POST":
-
         name = request.POST.get("name", "").strip()
-
         try:
-            price = Decimal(request.POST.get("price", "0"))
-        except InvalidOperation:
-            price = Decimal("0.00")
-
-        try:
-            stock = int(request.POST.get("stock", 0))
-        except ValueError:
-            stock = 0
-
-        Product.objects.create(
-            owner=request.user,
-            name=name,
-            price=price,
-            stock=stock
-        )
-
+            price = Decimal(request.POST.get("price", "0") or "0")
+            stock = int(request.POST.get("stock", "0") or "0")
+            if (
+                not name or len(name) > 255 or not price.is_finite()
+                or price < 0 or price > Decimal("99999999.99")
+                or price.as_tuple().exponent < -2
+                or stock < 0 or stock > 100000000
+            ):
+                raise ValueError
+        except (ValueError, InvalidOperation):
+            messages.error(request, "Enter a valid name, non-negative price and stock quantity.")
+            return redirect("add_product")
+        Product.objects.create(owner=request.user, name=name, price=price, stock=stock)
+        messages.success(request, "Product added.")
         return redirect("products")
-
     return render(request, "add_product.html")
+
+
+# ======================
 
 
 # ======================
@@ -163,78 +163,76 @@ def add_product(request):
 # ======================
 @login_required
 def create_invoice(request):
-
     run_stock_check(request.user)
-
-    products = Product.objects.filter(owner=request.user, is_deleted=False)
-
+    products = Product.objects.filter(owner=request.user, is_deleted=False).order_by("name")
     if request.method == "POST":
-
         product_ids = request.POST.getlist("product_id[]")
         quantities = request.POST.getlist("quantity[]")
-
-        if not product_ids:
-            messages.error(request, "Add at least one product.")
-            return redirect("create_invoice")
-
         try:
-            discount = Decimal(request.POST.get("discount", "0"))
-        except InvalidOperation:
-            discount = Decimal("0.00")
-
-        invoice = Invoice.objects.create(
-            owner=request.user,
-            invoice_number="TEMP",
-            customer_name=request.POST.get("customer_name", "").strip(),
-            customer_phone=request.POST.get("customer_phone", "").strip(),
-            discount=discount
-        )
-
-        created = 0
-
-        for pid, qty in zip(product_ids, quantities):
-
-            try:
-                product = Product.objects.get(id=pid, owner=request.user)
-                qty = int(qty)
-
-                if qty <= 0:
+            if not product_ids or len(product_ids) != len(quantities):
+                raise ValueError("Add at least one complete invoice item.")
+            requested = {}
+            for raw_id, raw_qty in zip(product_ids, quantities):
+                if not raw_id:  # Ignore an unused blank line in the form.
                     continue
-
-                if product.stock < qty:
-                    messages.warning(request, f"Not enough stock for {product.name}")
-                    continue
-
-                InvoiceItem.objects.create(
-                    invoice=invoice,
-                    description=product.name,
-                    quantity=qty,
-                    price=product.price
+                product_id = int(raw_id)
+                quantity = int(raw_qty)
+                if product_id <= 0 or quantity <= 0 or quantity > 100000000:
+                    raise ValueError("Item quantities must be positive.")
+                requested[product_id] = requested.get(product_id, 0) + quantity
+            if not requested:
+                raise ValueError("Select at least one product.")
+            discount = Decimal(request.POST.get("discount", "0") or "0")
+            if not discount.is_finite() or discount < 0:
+                raise ValueError("Discount cannot be negative.")
+            with transaction.atomic():
+                locked = list(
+                    Product.objects.select_for_update()
+                    .filter(owner=request.user, is_deleted=False, pk__in=requested)
+                    .order_by("pk")
                 )
-
-                product.stock -= qty
-                product.save()
-
-                created += 1
-
-            except Exception:
-                continue
-
-        if created == 0:
-            invoice.delete()
-            messages.error(request, "Invoice cannot be empty.")
+                if len(locked) != len(requested):
+                    raise ValueError("One or more selected products are unavailable.")
+                subtotal = sum(
+                    (product.price * requested[product.pk] for product in locked),
+                    Decimal("0.00"),
+                )
+                if discount > subtotal:
+                    raise ValueError("Discount cannot exceed the invoice subtotal.")
+                for product in locked:
+                    quantity = requested[product.pk]
+                    updated = Product.objects.filter(
+                        pk=product.pk, owner=request.user, is_deleted=False,
+                        stock__gte=quantity,
+                    ).update(stock=F("stock") - quantity)
+                    if not updated:
+                        raise ValueError(f"Not enough stock for {product.name}.")
+                invoice = Invoice.objects.create(
+                    owner=request.user,
+                    invoice_number=f"TMP-{uuid.uuid4().hex}",
+                    customer_name=request.POST.get("customer_name", "").strip()[:255],
+                    customer_phone=request.POST.get("customer_phone", "").strip()[:50],
+                    discount=discount,
+                )
+                InvoiceItem.objects.bulk_create([
+                    InvoiceItem(
+                        invoice=invoice, description=product.name,
+                        quantity=requested[product.pk], price=product.price,
+                    )
+                    for product in locked
+                ])
+                invoice.update_total()
+                invoice.invoice_number = f"INV-{invoice.pk:05d}"
+                invoice.save(update_fields=["invoice_number"])
+        except (InvalidOperation, ValueError, OverflowError) as exc:
+            messages.error(request, str(exc) or "Check the invoice quantities and discount.")
             return redirect("create_invoice")
+        messages.success(request, f"Invoice {invoice.invoice_number} created.")
+        return redirect("invoice_detail", invoice.pk)
+    return render(request, "create_invoice.html", {"products": products})
 
-        invoice.update_total()
-        invoice.invoice_number = f"INV-{invoice.id:05d}"
-        invoice.save()
 
-        messages.success(request, "Invoice created successfully.")
-        return redirect("dashboard")
-
-    return render(request, "create_invoice.html", {
-        "products": products
-    })
+# ======================
 
 
 # ======================
@@ -417,23 +415,25 @@ def invoice_pdf(request, invoice_id):
 # ======================
 @login_required
 def profile(request):
-
     profile_obj, _ = CompanyProfile.objects.get_or_create(user=request.user)
-
     if request.method == "POST":
-
         profile_obj.company_name = request.POST.get("company_name", "").strip()
         profile_obj.company_phone = request.POST.get("company_phone", "").strip()
         profile_obj.company_email = request.POST.get("company_email", "").strip()
         profile_obj.company_address = request.POST.get("company_address", "").strip()
-
-        if request.FILES.get("company_logo"):
-            profile_obj.company_logo = request.FILES["company_logo"]
-
+        logo = request.FILES.get("company_logo")
+        if logo:
+            if logo.size > 2 * 1024 * 1024:
+                messages.error(request, "Logo must be smaller than 2 MB.")
+                return redirect("profile")
+            profile_obj.company_logo = logo
         profile_obj.save()
+        messages.success(request, "Business profile saved.")
         return redirect("profile")
-
     return render(request, "profile.html", {"profile": profile_obj})
+
+
+# ======================
 
 
 # ======================
@@ -441,29 +441,31 @@ def profile(request):
 # ======================
 @login_required
 def restock(request):
-
     products = Product.objects.filter(owner=request.user, is_deleted=False)
-
     if request.method == "POST":
-
-        product_id = request.POST.get("product_id")
-        qty = int(request.POST.get("quantity") or 0)
-
-        product = get_object_or_404(Product, id=product_id, owner=request.user)
-
-        if qty > 0:
-            product.stock += qty
-            product.save()
-
-            Notification.objects.filter(
-                user=request.user,
-                type="stock",
-                message__icontains=product.name
-            ).delete()
-
+        try:
+            quantity = int(request.POST.get("quantity") or "0")
+            if quantity <= 0 or quantity > 100000000:
+                raise ValueError
+        except ValueError:
+            messages.error(request, "Restock quantity must be a positive whole number.")
+            return redirect("restock")
+        product = get_object_or_404(
+            Product, pk=request.POST.get("product_id"),
+            owner=request.user, is_deleted=False,
+        )
+        Product.objects.filter(pk=product.pk, owner=request.user).update(
+            stock=F("stock") + quantity
+        )
+        Notification.objects.filter(
+            user=request.user, type="stock", product_id=product.pk
+        ).delete()
+        messages.success(request, f"Restocked {product.name} by {quantity}.")
         return redirect("products")
-
     return render(request, "restock.html", {"products": products})
+
+
+# ======================
 
 
 # ======================
@@ -741,6 +743,30 @@ def all_invoices(request):
 
 
 @login_required
+def export_invoices_csv(request):
+    """Download this account's invoices only; no shared or cross-tenant rows."""
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = 'attachment; filename="ledgerlite-invoices.csv"'
+    response["Cache-Control"] = "no-store"
+    writer = csv.writer(response)
+    writer.writerow(["Invoice", "Customer", "Phone", "Created", "Subtotal", "Discount", "Total"])
+    for invoice in (
+        Invoice.objects.filter(owner=request.user)
+        .prefetch_related("items").order_by("-date_created")
+    ):
+        # Prevent spreadsheet formula injection in user-provided fields.
+        def safe_cell(value):
+            text = str(value or "")
+            return "'" + text if text.lstrip().startswith(("=", "+", "-", "@")) else text
+        writer.writerow([
+            invoice.invoice_number, safe_cell(invoice.customer_name),
+            safe_cell(invoice.customer_phone), invoice.date_created.isoformat(),
+            invoice.subtotal_amount, invoice.discount, invoice.total,
+        ])
+    return response
+
+
+@login_required
 def dashboard(request):
 
     run_stock_check(request.user)
@@ -828,8 +854,3 @@ def support(request):
 
 
 
-def db_check(request):
-    return HttpResponse(
-        f"Engine: {connection.settings_dict['ENGINE']}<br>"
-        f"Database: {connection.settings_dict['NAME']}"
-    )
